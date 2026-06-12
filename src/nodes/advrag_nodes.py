@@ -73,21 +73,6 @@ class AdVRagNodes:
 
         return {"sub_questions": final_sub_questions, "documents": documents} # Propagate documents
 
-    def retrieve_sub_question_documents(self, state: AdvanceRAGState) -> AdvanceRAGState:
-        """
-        Placeholder function. In an advanced RAG, this would retrieve documents for each sub-question.
-        For this simplified graph, main documents are reused as contexts for sub-questions.
-        This function is kept if the graph structure expects it, but its logic isn't modified
-        per the current task which focuses on LLM calls.
-        """
-        # In this setup, sub_questions already have 'contexts' from initial retrieval in plan_sub_steps.
-        # This node would typically implement specific retrieval for each sub-question.
-        # For the current task, no changes are needed here, as the contexts are already populated
-        # in `plan_sub_steps` by reusing the main query's retrieved documents.
-        print("---RETRIEVING SUB-QUESTION DOCUMENTS (reusing main documents)---")
-        return state # Return state as is, as contexts are already set.
-
-
     def generate_answers(self, state: AdvanceRAGState) -> AdvanceRAGState:
         """
         Generates answers for each sub-question using their contexts and LLM.

@@ -317,8 +317,8 @@ and re-score** — see §6 (P1 eval-harness fix).
 
 ## 6. Prioritized fix table
 
-> **Status (2026-06-12):** all **P0** items ✅ (§7); **P1** code items ✅ (§8); remaining P1 (eval-harness
-> chunk-logging, uniform answer-extraction, `chroma_db` reindex) and **P2** are open.
+> **Status (2026-06-12):** **P0** ✅ (§7), **P1** code ✅ (§8), **P2** code ✅ (§9). Still open: eval-harness
+> chunk-logging + uniform answer-extraction (P1) and the `chroma_db` reindex — all need the eval notebooks / a run.
 
 | Pri | Fix | Where |
 |---|---|---|
@@ -399,3 +399,27 @@ Standard returns a clean `"218"`. `py_compile` clean on all 9 changed files.
 
 > **⚠️ The §2 evaluation numbers predate the P0+P1 fixes** (they describe the old, broken CRAG and the CoT-polluted
 > Standard answers). They must be **regenerated** against real Ollama models before drawing fresh conclusions.
+
+---
+
+## 9. P2 cleanup — applied & smoke-tested 2026-06-12
+
+- [x] **Config env-var collision.** `LLAMA3_MODEL`/`GEMMA3_MODEL`/`GPT_OSS_MODEL`/`DEEPSEEK_MODEL` now read their
+  own env vars (were all reading `LLM_MODEL`, so setting it collapsed them) across `config.py`/`config_llama.py`/
+  `config_gemma.py`. Removed the unused `OllamaEmbeddings` import.
+- [x] **Deprecated `.persist()` guarded.** `vectorstore.py` calls `self.vectorstore.persist()` only when present
+  (`hasattr`) — modern `langchain_chroma` auto-persists and dropped the method.
+- [x] **Dead fields/node removed.** `rag_state.py`: dropped `context`/`feedback`/`is_hallucination`/`is_unsupported`.
+  `autorag_state.py`: dropped `temp_questions`/`retrieved_docs`/`revised`/`attempts` and `SubQuery.plans` (+ the
+  `"plans"` keys in `autorag_nodes.py`). `advrag_nodes.py`: removed the dead `retrieve_sub_question_documents`
+  placeholder (real per-sub-question retrieval now lives in `plan_sub_steps`, §8).
+- [x] **ReAct Wikipedia gated.** `reactnode.py` takes `use_wikipedia=False` (default); the Wikipedia tool and its
+  imports are built only when explicitly enabled, so the closed-book eval can't answer from general knowledge.
+  Added a closed-book system prompt.
+
+**P2 verification — PASSED.** `py_compile` clean on all 9 files; all three graphs still build + run with a fake LLM
+(CRAG `SYNTHESIZED`/attempts=1, Auto two sub-questions, Standard `218`); ReAct closed-book builds only the
+`retriever` tool (no Wikipedia import required).
+
+**Remaining (not `src/`):** eval-harness chunk-list logging + uniform answer-extraction (P1), and the `chroma_db`
+reindex with all-mpnet-base-v2 — then re-run the suite to regenerate §2.

@@ -46,7 +46,6 @@ class AutoRAGNodes:
                 if len(key) == 2 and key[0].upper() == "Q" and key[1].isdigit():
                     sub_qs[key] = {
                         "query": val.strip(),
-                        "plans": [],
                         "contexts": [],
                         "answer": "",
                         "steps": [],
@@ -56,7 +55,7 @@ class AutoRAGNodes:
         # sub-question rather than leaving sub_questions empty (-> empty final answer).
         if not sub_qs:
             print("No sub-questions parsed; falling back to the original question.")
-            sub_qs["Q1"] = {"query": state.question, "plans": [], "contexts": [], "answer": "", "steps": []}
+            sub_qs["Q1"] = {"query": state.question, "contexts": [], "answer": "", "steps": []}
 
         return state.model_copy(update={"sub_questions": sub_qs})
 
