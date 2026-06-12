@@ -454,7 +454,12 @@ Decisions: CRAG frozen at evaluated design (ADR 0001); new 4th architecture **CR
 - [x] **Stage 1 — CRAG baseline restore.** Reverted P1 per-sub-question retrieval in
   `advrag_nodes.plan_sub_steps` (sub-questions reuse original docs again); removed retriever
   plumbing from `AdVRagNodes.__init__` / `graph_builder_adv.py`. ADR 0001 + §0 terminology added.
-- [ ] Stage 2 — CRAG++ architecture (`graph_builder_cragpp.py`, smoke-tested).
+- [x] **Stage 2 — CRAG++ architecture.** New `src/state/cragpp_state.py` (adds
+  `final_contexts: List[Document]` — log this as `retrieved_context`, chunk list not blob),
+  `src/nodes/cragpp_nodes.py`, `src/graph_builder/graph_builder_cragpp.py`,
+  `src/utils/docs.py::dedup_documents`. Pipeline = CRAG skeleton + per-subq retrieval (graded
+  with fallback per subq) + dedup (within subq and union) + no synthesis word cap. Smoke test
+  `tests/smoke_cragpp.py` passes all 6 behavioral criteria.
 - [ ] Stage 3 — RAGAS failure diagnosis (`reports/ragas_diagnosis.md`).
 - [ ] Stage 4 — Eval infrastructure (API generators, reindex, generation/eval scripts, pilot gate).
 - [ ] Stage 5 — UI review + repair + inspector (`reports/ui_review.md`).
