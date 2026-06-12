@@ -11,7 +11,7 @@ class Config:
     GEMMA3_MODEL = os.getenv("LLM_MODEL", "gemma3:4b")
     GPT_OSS_MODEL = os.getenv("LLM_MODEL", "gpt-oss:20b")
     DEEPSEEK_MODEL = os.getenv("LLM_MODEL", "deepseek-r1:8b")
-    DEFAULT_EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "sentence-transformers/all-MiniLM-L6-v2")
+    DEFAULT_EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "sentence-transformers/all-mpnet-base-v2")  # 768-dim; rebuild chroma_db after switching (index dim mismatch)
     # DEFAULT_EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "nomic-embed-text")
     DEFAULT_CHUNK_SIZE = int(os.getenv("CHUNK_SIZE", "1000"))
     DEFAULT_CHUNK_OVERLAP = int(os.getenv("CHUNK_OVERLAP", "100"))

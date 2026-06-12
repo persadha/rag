@@ -197,7 +197,9 @@ layering new fixes.
 Severity: 🔴 blocker/crash · 🟠 major · 🟡 minor · 🟢 cleanup.
 
 > **Update 2026-06-12:** the 🔴 **P0** items below (Auto `.content` + parse fallback; CRAG state-unification,
-> empty-result fallback, generation loop guard) are now **fixed in code and smoke-tested** — see §7. P1/P2 remain open.
+> empty-result fallback, generation loop guard) are **fixed in code and smoke-tested** — see §7. The **P1** code
+> items (think-stripping, retriever `k`, relaxed grading, per-sub-question retrieval, decoupled prompt, embedding
+> wiring) are also fixed — see §8. Remaining P1 (eval-harness re-scoring) and P2 are open.
 
 ### 4.1 Standard RAG — `graph_builder.py` / `nodes.py` / `rag_state.py`
 
@@ -315,6 +317,9 @@ and re-score** — see §6 (P1 eval-harness fix).
 
 ## 6. Prioritized fix table
 
+> **Status (2026-06-12):** all **P0** items ✅ (§7); **P1** code items ✅ (§8); remaining P1 (eval-harness
+> chunk-logging, uniform answer-extraction, `chroma_db` reindex) and **P2** are open.
+
 | Pri | Fix | Where |
 |---|---|---|
 | **P0** | Unify `AdvanceRAGState` to one definition; correct import | `advrag_state.py`, `graph_builder_adv.py:3`, `advrag_nodes.py:13` |
@@ -361,3 +366,36 @@ empirically answer whether CRAG actually beats Auto — currently untested (see 
 
 > Decisions on record: fix scope = **P0 first** (then P1/P2); sequencing = save this doc now,
 > **defer code edits until files finish syncing**.
+
+---
+
+## 8. P1 batch — applied & smoke-tested 2026-06-12
+
+**✅ Code items DONE.**
+- [x] **`<think>` stripping.** New `src/utils/text.py::strip_reasoning()` removes deepseek-r1 reasoning; applied at
+  every LLM-output point in `nodes.py`, `autorag_nodes.py`, `advrag_nodes.py` (answers, JSON parse, both graders).
+- [x] **`get_retriever(k)`.** `vectorstore.py` now passes `search_kwargs={"k": k}` so `k` is honoured.
+- [x] **Relaxed grader matching.** CRAG `grade_documents`/`grade_generation` use `"yes" in score` (handles
+  "Yes.", "**yes**", "yes, relevant").
+- [x] **Real per-sub-question retrieval (CRAG).** `AdVRagNodes` now takes the retriever; `plan_sub_steps` retrieves
+  fresh docs per sub-question (falls back to the original docs if no retriever/query). Smoke test confirmed the
+  retriever is called with each sub-question query, not just the original.
+- [x] **Decouple reasoning (Standard).** `nodes.py` prompt no longer forces step-by-step CoT into the answer; asks
+  for a direct, concise answer (also fixed the unterminated quote) and strips `<think>`.
+- [x] **Embedding upgrade wired.** `config*.py` default `EMBEDDING_MODEL` → `sentence-transformers/all-mpnet-base-v2`
+  (768-dim). ⚠️ **Requires a `chroma_db` rebuild** — the old 384-dim index is incompatible; not reindexed here.
+- [x] **Bonus:** the `\{` regex `SyntaxWarning` in `advrag_nodes.py` is gone (raw string).
+
+**⏳ Still open (need the eval notebooks + a re-score run, not `src/`):**
+- [ ] **Eval harness — log CRAG `retrieved_context` as a list of chunks** (not one blob) + log pre-grading docs,
+  then re-score (§4.3). This is the fix that makes the precision/recall comparison fair.
+- [ ] **Uniform answer-extraction before scoring** (§5 benchmark fairness).
+- [ ] **`chroma_db` reindex** with all-mpnet-base-v2, then re-run the full suite.
+
+**P1 verification — PASSED.** `strip_reasoning` unit tests; `get_retriever` passes `search_kwargs`; all three graphs
+run with a fake LLM — CRAG strips `<think>` (answer `"SYNTHESIZED"`), the relaxed grader keeps a "Yes, relevant."
+doc, per-sub-question retrieval calls the retriever with each sub-query (`['main q?','alpha sub','beta sub']`);
+Standard returns a clean `"218"`. `py_compile` clean on all 9 changed files.
+
+> **⚠️ The §2 evaluation numbers predate the P0+P1 fixes** (they describe the old, broken CRAG and the CoT-polluted
+> Standard answers). They must be **regenerated** against real Ollama models before drawing fresh conclusions.

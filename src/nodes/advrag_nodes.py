@@ -8,15 +8,17 @@ from langchain_core.documents import Document
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.messages import BaseMessage
+from src.utils.text import strip_reasoning
 
 # Canonical state lives in src/state/advrag_state.py (single source of truth).
 from src.state.advrag_state import AdvanceRAGState
 
 
 class AdVRagNodes:
-    def __init__(self, llm, slm, retrieval_grader_prompt, generation_grader_prompt, question_rewriter_prompt):
+    def __init__(self, llm, slm, retriever=None, retrieval_grader_prompt=None, generation_grader_prompt=None, question_rewriter_prompt=None):
         self.llm = llm # This llm is typically a ChatModel (e.g., ChatOllama)
         self.slm = slm
+        self.retriever = retriever  # P1: used to retrieve fresh docs per sub-question
         self.retrieval_grader_prompt = retrieval_grader_prompt
         self.generation_grader_prompt = generation_grader_prompt
         self.question_rewriter_prompt = question_rewriter_prompt
@@ -41,9 +43,9 @@ class AdVRagNodes:
         # batch expects a list of inputs, where each input can be a PromptValue or list of messages
         # Corrected: Removed extra nesting, passing [prompt_messages] instead of [[prompt_messages]]
         responses_str_list = self.llm_to_str.batch([prompt_messages]) # Pass as list of single list of messages
-        sub_questions_str = responses_str_list[0] # Get the single string response
+        sub_questions_str = strip_reasoning(responses_str_list[0]) # strip <think> before JSON parse
 
-        pattern = "\{[\s\S]*\}"
+        pattern = r"\{[\s\S]*\}"
         
         # Assuming sub_questions_str is a JSON string of sub-questions
         try:
@@ -54,13 +56,19 @@ class AdVRagNodes:
             # Fallback: if not JSON, use original question as a single sub-question
             parsed_sub_questions = {"sub_question_1": {"query": question, "id": "1"}}
 
-        # Initialize sub_questions with contexts (using the main retrieved documents)
+        # P1: retrieve fresh, targeted documents per sub-question instead of reusing
+        # the original query's docs. Fall back to the originals if no retriever/query.
         final_sub_questions = {}
         for key, subq_data in parsed_sub_questions.items():
+            query = subq_data.get("query", "")
+            if self.retriever is not None and query:
+                contexts = self.retriever.invoke(query)
+            else:
+                contexts = documents
             final_sub_questions[key] = {
-                "query": subq_data.get("query", ""), # Ensure query exists
+                "query": query,
                 "id": subq_data.get("id", key),     # Ensure ID exists, default to key
-                "contexts": documents               # Use the main retrieved documents as context
+                "contexts": contexts,
             }
 
         return {"sub_questions": final_sub_questions, "documents": documents} # Propagate documents
@@ -104,6 +112,7 @@ class AdVRagNodes:
         if generation_inputs:
             # Batch process all sub-question answer generations
             individual_answers_strings = self.llm_to_str.batch(generation_inputs) # List of strings
+            individual_answers_strings = [strip_reasoning(a) for a in individual_answers_strings]
 
             # Store individual answers back into the state and collect for synthesis
             for i, key in enumerate(ordered_sub_question_keys):
@@ -125,7 +134,7 @@ class AdVRagNodes:
             synthesis_input = [[{"role": "user", "content": synthesis_prompt_content}]]
 
             final_answer_responses = self.llm_to_str.batch(synthesis_input)
-            final_answer = final_answer_responses[0] if final_answer_responses else "Could not synthesize a final answer."
+            final_answer = strip_reasoning(final_answer_responses[0]) if final_answer_responses else "Could not synthesize a final answer."
         else:
             final_answer = "No answers were generated for sub-questions."
 
@@ -157,8 +166,8 @@ class AdVRagNodes:
 
         filtered_docs = []
         for doc_grade_str, doc in zip(doc_grades_strings, documents):
-            score = doc_grade_str.strip().lower() # Normalize score
-            if score == "yes":
+            score = strip_reasoning(doc_grade_str).lower() # Normalize score (drop <think>)
+            if "yes" in score:
                 filtered_docs.append(doc)
             else:
                 print(f"Document graded as irrelevant: {doc.metadata.get('title', doc.metadata.get('source'))}")
@@ -186,12 +195,12 @@ class AdVRagNodes:
         # Batch grade generation, expecting string output ('yes' or 'no')
         # Corrected: Removed extra nesting, passing [grading_input_messages] instead of [[grading_input_messages]]
         grade_responses = self.slm_to_str.batch([grading_input_messages])
-        grade_str = grade_responses[0].strip().lower() # Get the single string response
+        grade_str = strip_reasoning(grade_responses[0]).lower() # single response, drop <think>
 
         # Count this attempt so the graph can cap re-generation (loop guard, P0).
         attempts = state.get("attempts", 0) + 1
 
-        if grade_str == "yes":
+        if "yes" in grade_str:
             print("---GENERATION USEFUL---")
             return {"generation_grade": "yes", "attempts": attempts}
         else:

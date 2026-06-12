@@ -9,7 +9,7 @@ class GraphBuilder:
         self.retriever = retriever
         self.llm = llm
         self.slm = slm
-        self.nodes = AdVRagNodes(llm, slm, None, None, None) # Placeholder, actual prompts passed during graph building
+        self.nodes = AdVRagNodes(llm, slm, retriever, None, None, None) # retriever enables per-sub-question retrieval (P1); prompts set in build()
         self.graph = None
 
     def set_prompts(self, retrieval_grader_prompt, generation_grader_prompt, question_rewriter_prompt):

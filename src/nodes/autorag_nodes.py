@@ -4,6 +4,7 @@ from src.state.autorag_state import AutoRAGState, SubQuery
 from typing import Dict, List, TypedDict
 from langchain_core.documents import Document
 from langchain_core.output_parsers import StrOutputParser
+from src.utils.text import strip_reasoning
 
 class AutoRAGNodes:
     """Contains node function for RAG workflow"""
@@ -33,7 +34,7 @@ class AutoRAGNodes:
             "Answer in the following format:\n"
             "Q1: <first sub-question>\nQ2: <second sub-question>\nQ3: <third sub-question>"
         )
-        response = self.llm_to_str.invoke(prompt)
+        response = strip_reasoning(self.llm_to_str.invoke(prompt))
         temp_questions = [line.strip() for line in response.splitlines() if line.strip()]
 
         sub_qs: Dict[str, SubQuery] = {}
@@ -70,7 +71,7 @@ class AutoRAGNodes:
                 "Answer in the following format:\n"
                 "**Step 1:** <first step>\n**Step 2:** <second step>\n**Step 3:** <third step>"
             )
-            response = self.llm_to_str.invoke(prompt)
+            response = strip_reasoning(self.llm_to_str.invoke(prompt))
             # Robust parsing: accept lines that start with **Step
             lines = [ln.strip() for ln in response.splitlines()]
             steps = []
@@ -110,7 +111,7 @@ class AutoRAGNodes:
         for key, subq in state.sub_questions.items():
             context_joined = "\n\n".join([doc.page_content for doc in subq["contexts"]])
             prompt = f"""Using the following documents:\n{context_joined}\nAnswer the question: "{subq["query"]}"."""
-            response = self.llm_to_str.invoke(prompt)
+            response = strip_reasoning(self.llm_to_str.invoke(prompt))
             answers.append(response)
             state.sub_questions[key]["answer"] = response  # store individual answer
 
@@ -122,7 +123,7 @@ class AutoRAGNodes:
         prompt = f"""Given the following answers to sub-questions:\n{answers_content}\n
         Synthesize a comprehensive answer to the main question: "{state.question}".
                     Give the answer in a clear and concise manner."""
-        response = self.llm_to_str.invoke(prompt)
+        response = strip_reasoning(self.llm_to_str.invoke(prompt))
 
-        return state.model_copy(update={"final_answer": response.strip()})
+        return state.model_copy(update={"final_answer": response})
 
