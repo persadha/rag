@@ -9,7 +9,7 @@ class GraphBuilder:
         self.retriever = retriever
         self.llm = llm
         self.slm = slm
-        self.nodes = AdVRagNodes(llm, slm, retriever, None, None, None) # retriever enables per-sub-question retrieval (P1); prompts set in build()
+        self.nodes = AdVRagNodes(llm, slm, None, None, None) # prompts set in build(); CRAG is frozen at its evaluated design (docs/adr/0001)
         self.graph = None
 
     def set_prompts(self, retrieval_grader_prompt, generation_grader_prompt, question_rewriter_prompt):

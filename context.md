@@ -7,6 +7,23 @@
 
 ---
 
+## 0. Terminology (canonical names — updated 2026-06-12)
+
+- **Standard** — `graph_builder.py` / `nodes.py`. Plain retrieve → generate. Eval codes l1/g1/d1.
+- **Auto** — `graph_builder_auto.py` / `autorag_nodes.py`. Query decomposition with step-level
+  re-retrieval. Never evaluated; kept as-is for reference.
+- **CRAG** — `graph_builder_adv.py` / `advrag_nodes.py`. **Frozen at its evaluated design**
+  (sub-questions reuse the original query's docs, ≤100-word synthesis cap, gemma3:1b doc-grader)
+  with crash-safety fixes only (state unification, grader fallback, loop guard, `<think>`
+  stripping). This is the system behind the l2/g2/d2 numbers. Do not add per-sub-question
+  retrieval here — see `docs/adr/0001-crag-frozen-at-evaluated-design.md`. (The P1 batch had
+  added it in place; reverted on branch RAG-2, see §10.)
+- **CRAG++** — `graph_builder_cragpp.py` / `cragpp_nodes.py` / `cragpp_state.py` (4th
+  architecture, new). CRAG's skeleton + per-sub-question retrieval, chunk dedup, no word cap.
+  All future improvements land here, never in CRAG.
+
+---
+
 ## 1. System overview
 
 **Purpose.** A research/R&D **benchmark harness**: run the same question set through
@@ -423,3 +440,23 @@ Standard returns a clean `"218"`. `py_compile` clean on all 9 changed files.
 
 **Remaining (not `src/`):** eval-harness chunk-list logging + uniform answer-extraction (P1), and the `chroma_db`
 reindex with all-mpnet-base-v2 — then re-run the suite to regenerate §2.
+
+---
+
+## 10. plans.md execution (branch RAG-2, started 2026-06-12)
+
+Staged execution of `plans.md`; full plan with pass criteria lives in the session plan file.
+Decisions: CRAG frozen at evaluated design (ADR 0001); new 4th architecture **CRAG++**; eval =
+3 systems × 2 generators (claude-haiku-4-5 / Llama 3.1 8B via Groq) × 300 rows, judge gpt-4.1
+(DeepEval, 4 metrics) — full runs deferred to a dedicated session; Streamlit UI
+(`streamlit_app_auto.py`) gets review + repair + chunk/score inspector.
+
+- [x] **Stage 1 — CRAG baseline restore.** Reverted P1 per-sub-question retrieval in
+  `advrag_nodes.plan_sub_steps` (sub-questions reuse original docs again); removed retriever
+  plumbing from `AdVRagNodes.__init__` / `graph_builder_adv.py`. ADR 0001 + §0 terminology added.
+- [ ] Stage 2 — CRAG++ architecture (`graph_builder_cragpp.py`, smoke-tested).
+- [ ] Stage 3 — RAGAS failure diagnosis (`reports/ragas_diagnosis.md`).
+- [ ] Stage 4 — Eval infrastructure (API generators, reindex, generation/eval scripts, pilot gate).
+- [ ] Stage 5 — UI review + repair + inspector (`reports/ui_review.md`).
+- [ ] Stage 6 — Consolidated advisory write-up (`reports/plans_response.md`).
+- [ ] DEFERRED — full eval runs (separate session).
