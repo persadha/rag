@@ -1,0 +1,44 @@
+# ── Local models (downloaded, not source) ─────────────────────────
+/ollama_models/
+/all-mpnet-base-v2/
+
+# ── Vector stores at repo root (regenerated from data) ────────────
+# Anchored with a leading "/" so these match ONLY the top-level data dirs,
+# NOT the source packages src/vectorstore/ or src/vector_store/.
+/chroma_db/
+/vectorstore/
+
+# ── Large archives ────────────────────────────────────────────────
+/rag.zip
+*.zip
+
+# ── Data & experiment outputs (large / binary, not source) ────────
+# Ignored by default. To version a specific small file (e.g. the eval set),
+# force-add it:  git add -f datasets/datasets.xlsx
+*.pdf
+/datasets/
+/results/
+/QA_Dataset*.xlsx
+*.csv
+
+# ── Python ────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+env/
+.env
+
+# ── Jupyter ───────────────────────────────────────────────────────
+.ipynb_checkpoints/
+
+# ── OS / editor ───────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.code-workspace
