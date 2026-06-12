@@ -23,7 +23,10 @@ class VectorStore:
 
     def save_vectorstore(self):
         if self.vectorstore:
-            self.vectorstore.persist()
+            # Chroma with a persist_directory auto-persists; older versions exposed
+            # an explicit .persist(). Call it only when present.
+            if hasattr(self.vectorstore, "persist"):
+                self.vectorstore.persist()
             print(f"Vector store data ensured to be saved in {self.persist_directory}")
         else:
             print("No vector store to save.")
@@ -50,7 +53,8 @@ class VectorStore:
     def add_documents(self, documents: List[Document]):
         if self.vectorstore:
             self.vectorstore.add_documents(documents)
-            self.vectorstore.persist()
+            if hasattr(self.vectorstore, "persist"):
+                self.vectorstore.persist()
             print(f"Added {len(documents)} documents to the vector store and persisted.")
         else:
             print("Vector store not initialized. Creating a new one with the provided documents.")
