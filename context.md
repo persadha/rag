@@ -123,6 +123,9 @@ Two evaluation passes exist and disagree on some metrics:
   de-dup + a 128k-context judge. **Trust Pass 2.**
 - `n` varies (195–300) partly because advanced RAG's **empty-answer rows get dropped**, which flatters its averages.
 - `rag_ver_2_eval` (14 q) and `rag_ver_3_eval` (20 q) are tiny early pilots — ignore for headline conclusions.
+- Why Pass 1 (RAGAS) was abandoned mid-way is now diagnosed with notebook-level evidence:
+  see `reports/ragas_diagnosis.md` (quota 429 → local-judge timeouts/parse failures → NaN
+  crashes from CRAG's dead-end bug; standard-RAG RAGAS runs in December *did* complete).
 
 **Bottom line.** Simple **standard RAG with deepseek-r1 (or gemma3)** is the best-performing configuration today; the
 advanced CRAG-style pipeline underperforms it everywhere that matters — consistent with the bugs in §4.3. The biggest
@@ -460,7 +463,10 @@ Decisions: CRAG frozen at evaluated design (ADR 0001); new 4th architecture **CR
   `src/utils/docs.py::dedup_documents`. Pipeline = CRAG skeleton + per-subq retrieval (graded
   with fallback per subq) + dedup (within subq and union) + no synthesis word cap. Smoke test
   `tests/smoke_cragpp.py` passes all 6 behavioral criteria.
-- [ ] Stage 3 — RAGAS failure diagnosis (`reports/ragas_diagnosis.md`).
+- [x] **Stage 3 — RAGAS failure diagnosis.** `reports/ragas_diagnosis.md` — four-cause cascade
+  (OpenAI quota 429 → local-judge timeout/parse failures → NaN ValidationError from CRAG
+  dead-end answers → unpinned 0.4.1/0.4.2 API drift), all claims with notebook::cell refs;
+  December standard-RAG RAGAS runs actually completed (gpt-4o-mini judge).
 - [ ] Stage 4 — Eval infrastructure (API generators, reindex, generation/eval scripts, pilot gate).
 - [ ] Stage 5 — UI review + repair + inspector (`reports/ui_review.md`).
 - [ ] Stage 6 — Consolidated advisory write-up (`reports/plans_response.md`).
