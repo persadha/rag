@@ -7,6 +7,23 @@
 
 ---
 
+## 0. Terminology (canonical names — updated 2026-06-12)
+
+- **Standard** — `graph_builder.py` / `nodes.py`. Plain retrieve → generate. Eval codes l1/g1/d1.
+- **Auto** — `graph_builder_auto.py` / `autorag_nodes.py`. Query decomposition with step-level
+  re-retrieval. Never evaluated; kept as-is for reference.
+- **CRAG** — `graph_builder_adv.py` / `advrag_nodes.py`. **Frozen at its evaluated design**
+  (sub-questions reuse the original query's docs, ≤100-word synthesis cap, gemma3:1b doc-grader)
+  with crash-safety fixes only (state unification, grader fallback, loop guard, `<think>`
+  stripping). This is the system behind the l2/g2/d2 numbers. Do not add per-sub-question
+  retrieval here — see `docs/adr/0001-crag-frozen-at-evaluated-design.md`. (The P1 batch had
+  added it in place; reverted on branch RAG-2, see §10.)
+- **CRAG++** — `graph_builder_cragpp.py` / `cragpp_nodes.py` / `cragpp_state.py` (4th
+  architecture, new). CRAG's skeleton + per-sub-question retrieval, chunk dedup, no word cap.
+  All future improvements land here, never in CRAG.
+
+---
+
 ## 1. System overview
 
 **Purpose.** A research/R&D **benchmark harness**: run the same question set through
@@ -106,6 +123,9 @@ Two evaluation passes exist and disagree on some metrics:
   de-dup + a 128k-context judge. **Trust Pass 2.**
 - `n` varies (195–300) partly because advanced RAG's **empty-answer rows get dropped**, which flatters its averages.
 - `rag_ver_2_eval` (14 q) and `rag_ver_3_eval` (20 q) are tiny early pilots — ignore for headline conclusions.
+- Why Pass 1 (RAGAS) was abandoned mid-way is now diagnosed with notebook-level evidence:
+  see `reports/ragas_diagnosis.md` (quota 429 → local-judge timeouts/parse failures → NaN
+  crashes from CRAG's dead-end bug; standard-RAG RAGAS runs in December *did* complete).
 
 **Bottom line.** Simple **standard RAG with deepseek-r1 (or gemma3)** is the best-performing configuration today; the
 advanced CRAG-style pipeline underperforms it everywhere that matters — consistent with the bugs in §4.3. The biggest
@@ -423,3 +443,54 @@ Standard returns a clean `"218"`. `py_compile` clean on all 9 changed files.
 
 **Remaining (not `src/`):** eval-harness chunk-list logging + uniform answer-extraction (P1), and the `chroma_db`
 reindex with all-mpnet-base-v2 — then re-run the suite to regenerate §2.
+
+---
+
+## 10. plans.md execution (branch RAG-2, started 2026-06-12)
+
+Staged execution of `plans.md`; full plan with pass criteria lives in the session plan file.
+Decisions: CRAG frozen at evaluated design (ADR 0001); new 4th architecture **CRAG++**; eval =
+3 systems × 2 generators (claude-haiku-4-5 / Llama 3.1 8B via Groq) × 300 rows, judge gpt-4.1
+(DeepEval, 4 metrics) — full runs deferred to a dedicated session; Streamlit UI
+(`streamlit_app_auto.py`) gets review + repair + chunk/score inspector.
+
+- [x] **Stage 1 — CRAG baseline restore.** Reverted P1 per-sub-question retrieval in
+  `advrag_nodes.plan_sub_steps` (sub-questions reuse original docs again); removed retriever
+  plumbing from `AdVRagNodes.__init__` / `graph_builder_adv.py`. ADR 0001 + §0 terminology added.
+- [x] **Stage 2 — CRAG++ architecture.** New `src/state/cragpp_state.py` (adds
+  `final_contexts: List[Document]` — log this as `retrieved_context`, chunk list not blob),
+  `src/nodes/cragpp_nodes.py`, `src/graph_builder/graph_builder_cragpp.py`,
+  `src/utils/docs.py::dedup_documents`. Pipeline = CRAG skeleton + per-subq retrieval (graded
+  with fallback per subq) + dedup (within subq and union) + no synthesis word cap. Smoke test
+  `tests/smoke_cragpp.py` passes all 6 behavioral criteria.
+- [x] **Stage 3 — RAGAS failure diagnosis.** `reports/ragas_diagnosis.md` — four-cause cascade
+  (OpenAI quota 429 → local-judge timeout/parse failures → NaN ValidationError from CRAG
+  dead-end answers → unpinned 0.4.1/0.4.2 API drift), all claims with notebook::cell refs;
+  December standard-RAG RAGAS runs actually completed (gpt-4o-mini judge).
+- [x] **Stage 4 — Eval infrastructure.** Venv `.venv/` (pins in `requirements-eval.txt`),
+  `src/config/config_api.py` (generators: haiku / llama-groq / **ollama** for key-less local
+  runs), `scripts/build_index.py` (chroma_db rebuilt: 2,346 pages → 6,771 chunks, 768-dim mpnet,
+  sanity query OK), `scripts/run_generation.py` (resumable, chunk-list `retrieved_context`,
+  k=4 parity), `scripts/run_eval.py` (DeepEval 4 metrics incl. answer-correctness GEval, judge
+  gpt-4.1 or `ollama:<model>`, per-run cost). **Pilot (local Ollama, per user)**: standard 15
+  rows (mean 18 s), CRAG 10 rows (66.6 s), CRAG++ 10 rows (97.5 s) — 0 empty answers; all
+  contexts JSON lists (CRAG blob artifact gone); CRAG++ dedup + loop guard + per-subq retrieval
+  observed live; 4/4 metrics numeric via Ollama judge, 0 failures. *Deferred to the eval
+  session (needs .env keys): haiku / llama-groq generator connectivity + real judge-cost
+  extrapolation; rough estimate ≈ $15 Haiku + $1–2 Groq + $80–90 gpt-4.1 judge (top of
+  envelope — consider gpt-4.1-mini ≈ $20 if budget matters).*
+- [x] **Stage 5 — UI review + repair + inspector.** `reports/ui_review.md` (13 issues with
+  file:line — 5 blocking: nonexistent `process_urls`/`create_retriever`, empty `DEFAULT_URLS`,
+  session-state deletion every rerun, wrong result key). `streamlit_app_auto.py` rewritten:
+  loads persisted chroma_db, sidebar architecture selector (Standard/CRAG/CRAG++) + Ollama
+  model selector, answer card with latency/chunk count, retrieved-chunk inspector with vector
+  distances + "contexts actually used" view, history capped at 10. Verified: headless boot
+  HTTP 200; widget-layer test (AppTest) answers correctly via Standard; CRAG and CRAG++ answer
+  via the same app functions (`tests/smoke_ui.py`).
+- [x] **Stage 6 — Consolidated advisory write-up.** `reports/plans_response.md` answers all six
+  plans.md items (architecture, RAGAS diagnosis, eval design + model recommendations, GPU +
+  retrieval-quality roadmap, UI review, context logging + production readiness). Everything
+  dependent on the full runs is marked PENDING r3.
+- [ ] **DEFERRED — full eval runs (separate session).** Needs `.env` keys. Run per system ×
+  generator: `scripts/run_generation.py` then `scripts/run_eval.py`; 10–15-row pilot with real
+  judge-cost extrapolation first; then fill the r3 slots in `reports/plans_response.md` and §2.

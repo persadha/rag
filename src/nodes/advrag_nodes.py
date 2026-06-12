@@ -15,10 +15,9 @@ from src.state.advrag_state import AdvanceRAGState
 
 
 class AdVRagNodes:
-    def __init__(self, llm, slm, retriever=None, retrieval_grader_prompt=None, generation_grader_prompt=None, question_rewriter_prompt=None):
+    def __init__(self, llm, slm, retrieval_grader_prompt=None, generation_grader_prompt=None, question_rewriter_prompt=None):
         self.llm = llm # This llm is typically a ChatModel (e.g., ChatOllama)
         self.slm = slm
-        self.retriever = retriever  # P1: used to retrieve fresh docs per sub-question
         self.retrieval_grader_prompt = retrieval_grader_prompt
         self.generation_grader_prompt = generation_grader_prompt
         self.question_rewriter_prompt = question_rewriter_prompt
@@ -56,19 +55,15 @@ class AdVRagNodes:
             # Fallback: if not JSON, use original question as a single sub-question
             parsed_sub_questions = {"sub_question_1": {"query": question, "id": "1"}}
 
-        # P1: retrieve fresh, targeted documents per sub-question instead of reusing
-        # the original query's docs. Fall back to the originals if no retriever/query.
+        # Evaluated CRAG design (frozen, see docs/adr/0001): every sub-question
+        # reuses the original query's documents as its context — no per-sub-question
+        # retrieval. Improvements live in CRAG++ (graph_builder_cragpp), not here.
         final_sub_questions = {}
         for key, subq_data in parsed_sub_questions.items():
-            query = subq_data.get("query", "")
-            if self.retriever is not None and query:
-                contexts = self.retriever.invoke(query)
-            else:
-                contexts = documents
             final_sub_questions[key] = {
-                "query": query,
+                "query": subq_data.get("query", ""),
                 "id": subq_data.get("id", key),     # Ensure ID exists, default to key
-                "contexts": contexts,
+                "contexts": documents,
             }
 
         return {"sub_questions": final_sub_questions, "documents": documents} # Propagate documents
