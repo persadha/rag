@@ -1,0 +1,21 @@
+langchain
+langchain-community
+langchain-ollama
+langgraph
+faiss-cpu
+pydantic
+python-dotenv
+beautifulsoup4
+requests
+streamlit
+wikipedia
+pypdf
+langchain_chroma
+# Embeddings
+langchain-huggingface
+# Semantic chunking
+langchain-experimental
+# Retrievers
+rank_bm25
+# Reranker
+flashrank
