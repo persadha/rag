@@ -1,0 +1,20 @@
+# Pinned local eval stack (Windows CPU, Python 3.13) — install into a venv:
+#   python -m venv .venv && .venv\Scripts\pip install -r requirements-eval.txt
+# Pinning is deliberate: unpinned ragas (0.4.1 vs 0.4.2) was an aggravating
+# factor in the RAGAS failure (reports/ragas_diagnosis.md, cause 4).
+chromadb==1.5.9
+langchain-chroma==1.1.0
+langchain-huggingface==1.2.2
+sentence-transformers==5.5.1
+langchain-anthropic==1.4.5
+langchain-openai==1.3.0
+langchain-community==0.4.2
+langchain-core==1.4.6
+langgraph==1.2.4
+deepeval==4.0.6
+langchain-ollama==1.1.0
+pypdf==6.13.2
+pandas
+openpyxl
+python-dotenv
+streamlit

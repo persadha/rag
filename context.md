@@ -467,7 +467,18 @@ Decisions: CRAG frozen at evaluated design (ADR 0001); new 4th architecture **CR
   (OpenAI quota 429 → local-judge timeout/parse failures → NaN ValidationError from CRAG
   dead-end answers → unpinned 0.4.1/0.4.2 API drift), all claims with notebook::cell refs;
   December standard-RAG RAGAS runs actually completed (gpt-4o-mini judge).
-- [ ] Stage 4 — Eval infrastructure (API generators, reindex, generation/eval scripts, pilot gate).
+- [x] **Stage 4 — Eval infrastructure.** Venv `.venv/` (pins in `requirements-eval.txt`),
+  `src/config/config_api.py` (generators: haiku / llama-groq / **ollama** for key-less local
+  runs), `scripts/build_index.py` (chroma_db rebuilt: 2,346 pages → 6,771 chunks, 768-dim mpnet,
+  sanity query OK), `scripts/run_generation.py` (resumable, chunk-list `retrieved_context`,
+  k=4 parity), `scripts/run_eval.py` (DeepEval 4 metrics incl. answer-correctness GEval, judge
+  gpt-4.1 or `ollama:<model>`, per-run cost). **Pilot (local Ollama, per user)**: standard 15
+  rows (mean 18 s), CRAG 10 rows (66.6 s), CRAG++ 10 rows (97.5 s) — 0 empty answers; all
+  contexts JSON lists (CRAG blob artifact gone); CRAG++ dedup + loop guard + per-subq retrieval
+  observed live; 4/4 metrics numeric via Ollama judge, 0 failures. *Deferred to the eval
+  session (needs .env keys): haiku / llama-groq generator connectivity + real judge-cost
+  extrapolation; rough estimate ≈ $15 Haiku + $1–2 Groq + $80–90 gpt-4.1 judge (top of
+  envelope — consider gpt-4.1-mini ≈ $20 if budget matters).*
 - [ ] Stage 5 — UI review + repair + inspector (`reports/ui_review.md`).
 - [ ] Stage 6 — Consolidated advisory write-up (`reports/plans_response.md`).
 - [ ] DEFERRED — full eval runs (separate session).
