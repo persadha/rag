@@ -479,6 +479,13 @@ Decisions: CRAG frozen at evaluated design (ADR 0001); new 4th architecture **CR
   session (needs .env keys): haiku / llama-groq generator connectivity + real judge-cost
   extrapolation; rough estimate ≈ $15 Haiku + $1–2 Groq + $80–90 gpt-4.1 judge (top of
   envelope — consider gpt-4.1-mini ≈ $20 if budget matters).*
-- [ ] Stage 5 — UI review + repair + inspector (`reports/ui_review.md`).
+- [x] **Stage 5 — UI review + repair + inspector.** `reports/ui_review.md` (13 issues with
+  file:line — 5 blocking: nonexistent `process_urls`/`create_retriever`, empty `DEFAULT_URLS`,
+  session-state deletion every rerun, wrong result key). `streamlit_app_auto.py` rewritten:
+  loads persisted chroma_db, sidebar architecture selector (Standard/CRAG/CRAG++) + Ollama
+  model selector, answer card with latency/chunk count, retrieved-chunk inspector with vector
+  distances + "contexts actually used" view, history capped at 10. Verified: headless boot
+  HTTP 200; widget-layer test (AppTest) answers correctly via Standard; CRAG and CRAG++ answer
+  via the same app functions (`tests/smoke_ui.py`).
 - [ ] Stage 6 — Consolidated advisory write-up (`reports/plans_response.md`).
 - [ ] DEFERRED — full eval runs (separate session).

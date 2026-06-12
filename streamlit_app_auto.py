@@ -1,160 +1,164 @@
-"""Streamlit UI for Agentic RAG System"""
+"""Streamlit UI for the PIRLS RAG system.
 
-import streamlit as st
-from pathlib import Path
+Run:  streamlit run streamlit_app_auto.py
+
+Requires the persisted index (python scripts/build_index.py) and a local
+Ollama server. Architecture and model are selectable in the sidebar; every
+answer shows the retrieved chunks with their vector distance to the question
+(retrieval inspection, plans.md item 6). Bug history: reports/ui_review.md.
+"""
+
 import sys
 import time
+from pathlib import Path
 
-# Add src to path
+import streamlit as st
+
 sys.path.append(str(Path(__file__).parent))
 
 from src.config.config import Config
-from src.document_ingestion.document_processor import DocumentProcessor
-from src.vectorstore.vectorstore import VectorStore
-from src.graph_builder.graph_builder_adv import GraphBuilder
+from src.config.config_api import APIConfig
+from src.utils.text import strip_reasoning
 
-# Page configuration
-st.set_page_config(
-    page_title="RAG Search",
-    page_icon="RAG",
-    layout="centered"
-)
+ARCHITECTURES = ("Standard", "CRAG", "CRAG++")
+OLLAMA_MODELS = ("llama3:8b", "gemma3:4b", "deepseek-r1:8b")
+RETRIEVER_K = 4
 
-# Simple CS
-st.markdown("""
-    <style>
-            .stButton > button {
-            width: 100%;
-            background-color: #4CAF50;
-            color: white;
-            font-weight: bold;
-            }
-    </style>
-""", unsafe_allow_html=True)
+st.set_page_config(page_title="PIRLS RAG Search", page_icon="📚", layout="centered")
 
-def init_session_state():
-    """Initialize session state variables"""
-
-if 'rag_system' not in st.session_state:
-    st.session_state.rag_system = None
-
-if "rag_system" in st.session_state:
-    del st.session_state["rag_system"]
-
-if 'initialized' not in st.session_state:
-    st.session_state.initialized = False
-
-if 'history' not in st.session_state:
-    st.session_state.history = []
 
 @st.cache_resource
-def initialize_rag():
-    """Intialized the RAG system (cached)"""
-    try:
-        # Initialized components
-        llm = Config.get_llm()
+def load_store():
+    """Load the persisted Chroma index (built once by scripts/build_index.py)."""
+    from langchain_huggingface import HuggingFaceEmbeddings
+    from src.vectorstore.vectorstore import VectorStore
 
-        slm = Config.get_slm()
-        embedding = Config.get_embedding_model()
-        doc_processor = DocumentProcessor(embedding)
-        vector_store = VectorStore(embedding)
+    persist_dir = str(Path(__file__).parent / "chroma_db")
+    embeddings = HuggingFaceEmbeddings(model_name=Config.DEFAULT_EMBEDDING_MODEL)
+    store = VectorStore(embeddings, persist_directory=persist_dir)
+    store.load_vectorstore()
+    return store
 
-        # Use default URLs
-        urls = Config.DEFAULT_URLS
-        #pdfs = Config.PDF_PATHS
 
-        # Process documents
-        documents = doc_processor.process_urls(urls)
-        #documents = doc_processor.process_pdf(pdfs)
+@st.cache_resource
+def get_graph(architecture: str, model_name: str):
+    """Build the selected graph once per (architecture, model)."""
+    from langchain_ollama import ChatOllama
+    from langchain_core.output_parsers import StrOutputParser
 
-        # Create vector store
-        vector_store.create_retriever(documents)
+    store = load_store()
+    retriever = store.get_retriever(k=RETRIEVER_K)
+    llm = ChatOllama(model=model_name, temperature=0, num_ctx=8192) | StrOutputParser()
+    slm = APIConfig.get_ollama_slm()  # gemma3:1b grader (CRAG/CRAG++ design)
 
-        # Build graph
-        graph_builder = GraphBuilder(
-            retriever=vector_store.get_retriever(),
-            llm=llm,
-            slm=slm
-        )
-        graph_builder.build()
+    if architecture == "Standard":
+        from src.graph_builder.graph_builder import GraphBuilder
+        builder = GraphBuilder(retriever=retriever, llm=llm)
+    elif architecture == "CRAG":
+        from src.graph_builder.graph_builder_adv import GraphBuilder
+        builder = GraphBuilder(retriever=retriever, llm=llm, slm=slm)
+    else:  # CRAG++
+        from src.graph_builder.graph_builder_cragpp import GraphBuilder
+        builder = GraphBuilder(retriever=retriever, llm=llm, slm=slm)
+    builder.build()
+    return builder
 
-        return graph_builder, len(documents)
-    except Exception as e:
-        st.error(f"Failed to intialized: {str(e)}")
-        return None, 0
-    
+
+def extract(architecture: str, result: dict):
+    """(answer, docs actually used) per architecture — keys differ by design."""
+    if architecture == "Standard":
+        return result.get("answer", ""), result.get("retrieved_docs", [])
+    if architecture == "CRAG":
+        return result.get("final_answer", ""), result.get("documents", [])
+    return result.get("final_answer", ""), (result.get("final_contexts")
+                                            or result.get("documents", []))
+
+
 def main():
-    """Main application"""
-    init_session_state()
-
-    # Title
     st.title("PIRLS Document Search")
-    st.markdown("Ask question about the loaded documents.")
+    st.markdown("Ask a question about the PIRLS 2021 corpus.")
 
-    # Initialized system
-    if not st.session_state.initialized:
-        with st.spinner("Loading system..."):
-            rag_system, num_chunks = initialize_rag()
-            if rag_system:
-                st.session_state.rag_system = rag_system
-                st.session_state.initialized = True
-                st.success(f"System ready! ({num_chunks} document chunks loaded)")
-    st.markdown("---")
+    with st.sidebar:
+        architecture = st.selectbox("Architecture", ARCHITECTURES,
+                                    help="Standard: retrieve→generate. CRAG: graded docs + "
+                                         "sub-questions over shared context. CRAG++: CRAG + "
+                                         "per-sub-question retrieval, dedup, no word cap.")
+        model_name = st.selectbox("Generator model (Ollama)", OLLAMA_MODELS)
+        st.caption(f"Retriever: top-{RETRIEVER_K} chunks, "
+                   f"{Config.DEFAULT_EMBEDDING_MODEL.split('/')[-1]} embeddings. "
+                   "Doc grader (CRAG/CRAG++): gemma3:1b.")
 
-    # Search interface
+    if "history" not in st.session_state:
+        st.session_state.history = []
+
+    try:
+        store = load_store()
+        if store.vectorstore is None:
+            st.error("No index found at ./chroma_db — build it first:  "
+                     "`python scripts/build_index.py`")
+            st.stop()
+    except Exception as exc:
+        st.error(f"Failed to load the vector store: {exc}")
+        st.stop()
+
     with st.form("search_form"):
-        question = st.text_input(
-            "Enter your question:",
-            placeholder="What would you like to know?"
-        )
-        submit = st.form_submit_button("Search")
+        question = st.text_input("Enter your question:",
+                                 placeholder="e.g. How is reading assessed in Flanders?")
+        submitted = st.form_submit_button("Search", type="primary")
 
-    # Process search
-    if submit and question:
-        if st.session_state.rag_system:
-            with st.spinner("Searching..."):
-                start_time = time.time()
+    if submitted and question.strip():
+        question = question.strip()
+        try:
+            with st.spinner(f"Running {architecture} with {model_name}…"):
+                graph = get_graph(architecture, model_name)
+                start = time.time()
+                result = graph.run(question)
+                elapsed = time.time() - start
+        except Exception as exc:
+            st.error(f"Generation failed: {exc}")
+            st.stop()
 
-                # Get answer
-                result = st.session_state.rag_system.run(question)
+        answer, used_docs = extract(architecture, result)
+        answer = strip_reasoning(answer) or "(no answer produced)"
 
-                elapsed_time = time.time() - start_time
+        st.markdown("### Answer")
+        st.success(answer)
+        st.caption(f"{architecture} · {model_name} · {elapsed:.1f}s · "
+                   f"{len(used_docs)} context chunks")
 
-                # Add to history
-                st.session_state.history.append({
-                    'question': question,
-                    'answer': result['final_answer'],
-                    'time': elapsed_time
-                })
+        # Retrieval inspection: vector distance of the top chunks to the question
+        with st.expander("Retrieved chunks vs. question (vector distance)", expanded=True):
+            st.caption("Top chunks by embedding distance to the question — "
+                       "lower distance = semantically closer.")
+            scored = store.vectorstore.similarity_search_with_score(question, k=RETRIEVER_K)
+            for i, (doc, distance) in enumerate(scored, start=1):
+                source = Path(doc.metadata.get("source", "?")).name
+                page = doc.metadata.get("page", "?")
+                st.markdown(f"**[{i}] distance {distance:.3f}** — {source}, p.{page}")
+                st.code(doc.page_content, language=None, wrap_lines=True)
 
-                # Display answer
-                st.markdown("### Answer")
-                st.success(result['final_answer'])
+        # What the architecture actually used can differ (grading, per-sub-question retrieval)
+        with st.expander(f"Contexts {architecture} actually used ({len(used_docs)} chunks)"):
+            for i, doc in enumerate(used_docs, start=1):
+                source = Path(doc.metadata.get("source", "?")).name
+                page = doc.metadata.get("page", "?")
+                st.markdown(f"**[{i}]** {source}, p.{page}")
+                st.code(doc.page_content, language=None, wrap_lines=True)
 
-                # Show retrieved docs in expander
-                with st.expander("Source Documents"):
-                    for i, doc in enumerate(result['retrieved_docs'], 1):
-                        st.text_area(
-                            f"Document {i}",
-                            #doc.page_content[:3000] + "...",
-                            doc.page_content,
-                            height=100,
-                            disabled=True
-                        )
+        st.session_state.history.insert(0, {
+            "question": question, "answer": answer,
+            "architecture": architecture, "model": model_name, "time": elapsed,
+        })
+        st.session_state.history = st.session_state.history[:10]
 
-                st.caption(f"Response time: {elapsed_time:.2f} seconds")
-
-    # Show history
     if st.session_state.history:
         st.markdown("---")
-        st.markdown("### Recent Searches")
+        st.markdown("### Recent searches")
+        for item in st.session_state.history:
+            st.markdown(f"**{item['question']}**")
+            st.markdown(item["answer"][:200] + ("…" if len(item["answer"]) > 200 else ""))
+            st.caption(f"{item['architecture']} · {item['model']} · {item['time']:.1f}s")
 
-        for item in reversed(st.session_state.history[-3:]):
-            with st.container():
-                st.markdown(f"Question: {item['question']}")
-                st.markdown(f"Answer: {item['answer'][:100]}...")
-                st.caption(f"Time: {item['time']:.2f}s")
-                st.markdown("")
 
 if __name__ == "__main__":
     main()
