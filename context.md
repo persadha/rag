@@ -487,5 +487,10 @@ Decisions: CRAG frozen at evaluated design (ADR 0001); new 4th architecture **CR
   distances + "contexts actually used" view, history capped at 10. Verified: headless boot
   HTTP 200; widget-layer test (AppTest) answers correctly via Standard; CRAG and CRAG++ answer
   via the same app functions (`tests/smoke_ui.py`).
-- [ ] Stage 6 — Consolidated advisory write-up (`reports/plans_response.md`).
-- [ ] DEFERRED — full eval runs (separate session).
+- [x] **Stage 6 — Consolidated advisory write-up.** `reports/plans_response.md` answers all six
+  plans.md items (architecture, RAGAS diagnosis, eval design + model recommendations, GPU +
+  retrieval-quality roadmap, UI review, context logging + production readiness). Everything
+  dependent on the full runs is marked PENDING r3.
+- [ ] **DEFERRED — full eval runs (separate session).** Needs `.env` keys. Run per system ×
+  generator: `scripts/run_generation.py` then `scripts/run_eval.py`; 10–15-row pilot with real
+  judge-cost extrapolation first; then fill the r3 slots in `reports/plans_response.md` and §2.
