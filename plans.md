@@ -7,3 +7,5 @@
 Suggest method to improve retrieval quality. Better embedding? Different retrieval strategy? Embed metadata to every embedded vectors?
 5. Conduct a comprehensive review of the user interface (UI) and identify any existing usability issues, bugs, or areas for improvement.
 6. Is there an existing mechanism to visualize or log the retrieved context? I need to compare the retrieved text against the initial prompt to assess semantic proximity. Finally, please provide recommendations on architectural improvements required to scale the system and make it production-ready.
+
+

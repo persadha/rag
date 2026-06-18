@@ -15,12 +15,14 @@ Usage:
 
 import argparse
 import json
+import os
 import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
+import numpy as np
 import pandas as pd
 from dotenv import load_dotenv
 
@@ -34,18 +36,46 @@ try:  # deepeval >= 4 renamed the params enum
 except ImportError:
     from deepeval.test_case import LLMTestCaseParams as TestCaseParams
 
+from src.config.config import Config
 from src.config.config_api import APIConfig
 
-METRIC_COLUMNS = ("contextual_precision", "contextual_recall", "faithfulness", "answer_correctness")
+METRIC_COLUMNS = ("contextual_precision", "contextual_recall", "faithfulness",
+                  "answer_correctness", "gold_context_similarity")
 
 
 def make_judge(judge: str):
     """'gpt-4.1' -> OpenAI judge (needs OPENAI_API_KEY); 'ollama:<model>' -> local
-    Ollama judge (key-less pilots; weaker judge, plumbing validation only)."""
+    Ollama judge (key-less pilots; weaker judge, plumbing validation only);
+    'compat:<model>' -> any OpenAI-compatible endpoint via deepeval LocalModel,
+    reading JUDGE_BASE_URL + JUDGE_API_KEY from .env (e.g. DeepInfra/Together/
+    Fireworks-hosted gpt-oss-120b)."""
     if judge.startswith("ollama:"):
         from deepeval.models import OllamaModel
         return OllamaModel(model=judge.split(":", 1)[1], temperature=0)
+    if judge.startswith("compat:"):
+        from deepeval.models import LocalModel
+        base_url = os.getenv("JUDGE_BASE_URL", APIConfig.JUDGE_BASE_URL)
+        api_key = os.getenv("JUDGE_API_KEY")
+        if not api_key:
+            raise RuntimeError("compat judge needs JUDGE_API_KEY in .env")
+        return LocalModel(model=judge.split(":", 1)[1], base_url=base_url,
+                          api_key=api_key, temperature=0)
     return judge
+
+
+def gold_context_similarity(embedder, reference_context: str, chunks: list) -> float:
+    """Retrieval quality vs ground truth: max cosine similarity between the gold
+    reference_context and any retrieved chunk (same embedder as the index; no API cost).
+    Returns 0.0 when nothing was retrieved or no gold context is available."""
+    if not chunks or not reference_context or not str(reference_context).strip():
+        return 0.0
+    ref = np.asarray(embedder.embed_query(str(reference_context)), dtype=float)
+    mats = np.asarray(embedder.embed_documents([str(c) for c in chunks]), dtype=float)
+    ref_n = np.linalg.norm(ref)
+    chunk_n = np.linalg.norm(mats, axis=1)
+    denom = ref_n * chunk_n
+    sims = np.where(denom > 0, mats @ ref / np.where(denom > 0, denom, 1.0), 0.0)
+    return float(np.max(sims))
 
 
 def make_metrics(model):
@@ -85,6 +115,8 @@ def main():
         print(f"Resuming: {len(done)} rows already scored in {out_path.name}")
 
     metrics = make_metrics(make_judge(args.judge))
+    embedder = HuggingFaceEmbeddings(model_name=Config.DEFAULT_EMBEDDING_MODEL)
+    has_ref_ctx = "reference_context" in df.columns
     total_cost, failures = 0.0, 0
 
     for _, row in df.iterrows():
@@ -93,11 +125,12 @@ def main():
         answer = str(row["answer"]) if pd.notna(row["answer"]) else ""
         if not answer:
             print(f"  WARNING row {row['row_id']}: empty answer — scoring anyway")
+        chunks = json.loads(row["retrieved_context"])
         test_case = LLMTestCase(
             input=str(row["question"]),
             actual_output=answer,
             expected_output=str(row["answer_ref"]),
-            retrieval_context=json.loads(row["retrieved_context"]),
+            retrieval_context=chunks,
         )
         scores = {}
         for name, metric in metrics.items():
@@ -109,8 +142,12 @@ def main():
                 failures += 1
                 scores[name] = None
                 print(f"  row {row['row_id']} {name} FAILED: {type(exc).__name__}: {str(exc)[:120]}")
+        # Retrieval quality vs gold context — deterministic, no judge cost.
+        ref_ctx = row["reference_context"] if has_ref_ctx else ""
+        scores["gold_context_similarity"] = gold_context_similarity(embedder, ref_ctx, chunks)
         record = pd.DataFrame([{
             "row_id": row["row_id"], "system": row["system"], "generator": row["generator"],
+            "data_type": row.get("data_type", None),
             **scores,
         }])
         record.to_csv(out_path, mode="a", header=not out_path.exists(), index=False)

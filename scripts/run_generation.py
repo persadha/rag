@@ -68,7 +68,8 @@ def main():
     parser.add_argument("--system", required=True, choices=SYSTEMS)
     parser.add_argument("--generator", required=True, choices=APIConfig.GENERATOR_NAMES)
     parser.add_argument("--rows", type=int, default=None, help="limit to first N rows (pilot)")
-    parser.add_argument("--dataset", default=str(ROOT / "datasets" / "datasets.xlsx"))
+    parser.add_argument("--dataset",
+                        default=str(ROOT / "datasets" / "revision" / "evaluation_dataset.xlsx"))
     parser.add_argument("--sheet", default="final")
     parser.add_argument("--persist-dir", default=str(ROOT / "chroma_db"))
     parser.add_argument("--delay", type=float, default=0.0,
@@ -76,7 +77,10 @@ def main():
     args = parser.parse_args()
 
     df = pd.read_excel(args.dataset, sheet_name=args.sheet)
-    for col in ("question", "answer_ref"):
+    # Revision dataset schema bridge: map the new column names to what the pipeline
+    # expects, and keep `id` as a stable, resume-safe row identifier.
+    df = df.rename(columns={"user_query": "question", "reference_answer": "answer_ref"})
+    for col in ("id", "question", "answer_ref", "reference_context", "data_type"):
         if col not in df.columns:
             sys.exit(f"Dataset sheet '{args.sheet}' has no '{col}' column; found: {list(df.columns)}")
     if args.rows:
@@ -106,7 +110,8 @@ def main():
                 "llama-groq": APIConfig.OPENSOURCE_GENERATOR_MODEL,
                 "ollama": APIConfig.OLLAMA_GENERATOR_MODEL}[args.generator]
     empty, latencies = 0, []
-    for row_id, row in df.iterrows():
+    for _, row in df.iterrows():
+        row_id = int(row["id"])  # stable id from the dataset, not the positional index
         if row_id in done:
             continue
         t0 = time.time()
@@ -118,8 +123,10 @@ def main():
             print(f"  WARNING row {row_id}: empty answer")
         record = pd.DataFrame([{
             "row_id": row_id,
+            "data_type": row["data_type"],
             "question": row["question"],
             "answer_ref": row["answer_ref"],
+            "reference_context": row["reference_context"],
             "answer": answer,
             "retrieved_context": json.dumps(chunks, ensure_ascii=False),
             "n_chunks": len(chunks),
