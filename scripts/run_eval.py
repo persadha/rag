@@ -25,6 +25,7 @@ sys.path.insert(0, str(ROOT))
 import numpy as np
 import pandas as pd
 from dotenv import load_dotenv
+from langchain_huggingface import HuggingFaceEmbeddings
 
 load_dotenv()
 
