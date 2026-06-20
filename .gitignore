@@ -6,6 +6,7 @@
 # Anchored with a leading "/" so these match ONLY the top-level data dirs,
 # NOT the source packages src/vectorstore/ or src/vector_store/.
 /chroma_db/
+/chroma_db_*/
 /vectorstore/
 
 # ── Large archives ────────────────────────────────────────────────
