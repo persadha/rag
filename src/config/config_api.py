@@ -29,11 +29,31 @@ class APIConfig:
     JUDGE_BASE_URL = os.getenv("JUDGE_BASE_URL", "https://api.deepinfra.com/v1/openai")
     # JUDGE_API_KEY is read directly in run_eval.make_judge()
 
+    # DeepInfra-hosted open-source generators (OpenAI-compatible). Reuses the DeepInfra
+    # key (DEEPINFRA_API_KEY, falling back to JUDGE_API_KEY since the judge uses DeepInfra too).
+    DEEPINFRA_BASE_URL = os.getenv("DEEPINFRA_BASE_URL", "https://api.deepinfra.com/v1/openai")
+    GEMMA_DEEPINFRA_MODEL = os.getenv("GEMMA_DEEPINFRA_MODEL", "google/gemma-3-4b-it")
+
+    # Closed-model comparison (E4): GPT-5.4-mini via OpenAI. Reasoning model — no temperature,
+    # reasoning_effort kept low for a fair vs. non-reasoning open models comparison + lower cost.
+    OPENAI_MINI_MODEL = os.getenv("OPENAI_MINI_MODEL", "gpt-5.4-mini")
+    OPENAI_MINI_REASONING = os.getenv("OPENAI_MINI_REASONING", "low")
+
     # Local Ollama (no API key; used for key-less pilots and offline runs)
     OLLAMA_GENERATOR_MODEL = os.getenv("OLLAMA_GENERATOR_MODEL", "llama3:8b")
     OLLAMA_SLM_MODEL = os.getenv("OLLAMA_SLM_MODEL", "gemma3:1b")
 
-    GENERATOR_NAMES = ("haiku", "llama-groq", "ollama")
+    GENERATOR_NAMES = ("haiku", "llama-groq", "ollama", "gemma-deepinfra", "openai-mini")
+
+    # Model id shown in the gen CSV per generator (for the local "ollama" path the
+    # actual model comes from OLLAMA_GENERATOR_MODEL, set via env).
+    @staticmethod
+    def model_id_for(name: str) -> str:
+        return {"haiku": APIConfig.ANTHROPIC_GENERATOR_MODEL,
+                "llama-groq": APIConfig.OPENSOURCE_GENERATOR_MODEL,
+                "ollama": APIConfig.OLLAMA_GENERATOR_MODEL,
+                "gemma-deepinfra": APIConfig.GEMMA_DEEPINFRA_MODEL,
+                "openai-mini": APIConfig.OPENAI_MINI_MODEL}.get(name, name)
 
     @staticmethod
     def get_generator(name: str):
@@ -56,6 +76,21 @@ class APIConfig:
             from langchain_ollama import ChatOllama
             chat = ChatOllama(model=APIConfig.OLLAMA_GENERATOR_MODEL,
                               temperature=0, num_ctx=8192)
+        elif name == "gemma-deepinfra":
+            from langchain_openai import ChatOpenAI
+            api_key = os.getenv("DEEPINFRA_API_KEY") or os.getenv("JUDGE_API_KEY")
+            if not api_key:
+                raise RuntimeError("DEEPINFRA_API_KEY (or JUDGE_API_KEY) not set for gemma-deepinfra")
+            chat = ChatOpenAI(model=APIConfig.GEMMA_DEEPINFRA_MODEL,
+                              base_url=APIConfig.DEEPINFRA_BASE_URL, api_key=api_key,
+                              temperature=0, max_tokens=1024, max_retries=5)
+        elif name == "openai-mini":
+            from langchain_openai import ChatOpenAI
+            if not os.getenv("OPENAI_API_KEY"):
+                raise RuntimeError("OPENAI_API_KEY not set for openai-mini (E4 closed-model run)")
+            # Reasoning model: omit temperature (only default supported); cap reasoning via effort.
+            chat = ChatOpenAI(model=APIConfig.OPENAI_MINI_MODEL,
+                              reasoning_effort=APIConfig.OPENAI_MINI_REASONING, max_retries=5)
         else:
             raise ValueError(f"Unknown generator '{name}'; expected one of {APIConfig.GENERATOR_NAMES}")
         return chat | StrOutputParser()
