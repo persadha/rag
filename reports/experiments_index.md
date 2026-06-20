@@ -11,6 +11,7 @@ local generation, DeepInfra `gpt-oss-120b` judge (held constant across ALL runs 
   - §5b gemma3:1b grader is net-negative (measured)
   - §5c embedding/reranker model upgrade evaluation
   - §5d cross-country confusion diagnostic (metadata filtering deprioritized)
+  - §5e fine-tuning assessment (don't yet; old 300-set is 100% eval leak → only ~105 clean rows)
   - §6 hyperparameter findings (k too small at 4; chunks 2.3× the gold passage)
   - SOTA roadmap + experiment list (E1–E8) + sources
 - **`reports/plans_response.md`** — answers to the original six plans.md items; r3 result slots filled.
@@ -41,7 +42,8 @@ injects off-topic chunks (precision 0.45). Shared ceiling: llama3:8b fails ~21% 
 
 ## Key levers (ranked, for answer correctness)
 1. **Wider retrieval + reranking** — gold chunk in top-4 only 63%, top-20 87%; reranking recovers it.
-   Preliminary reranked Standard (partial): AC ~0.62 / P ~0.87 / R ~0.86 vs baseline 0.47/0.74/0.80.
+   **CONFIRMED (full 195): reranked Standard AC 0.473→0.625 (+32%), P 0.741→0.837 (+13%), R 0.796→0.837 (+5%).**
+   Worst-retrieval rows (baseline precision<0.5, n=40): precision 0.13→0.53, AC 0.19→0.33. Biggest lever found, ~$0.
 2. **Stronger generator** — the ~21% good-context-wrong-answer ceiling (E4 tests GPT-5.4-mini).
 3. **Better prompt** (E8), **smaller chunks** (E2, 512/64), **reranker/embedder upgrades** (deferred), **grader fix**.
 Deprioritized: metadata-by-country (mild confusion, subsumed by rerank), multi-query, self-consistency.
@@ -50,7 +52,7 @@ Deprioritized: metadata-by-country (mild confusion, subsumed by rerank), multi-q
 | Phase | What | Status |
 |---|---|---|
 | r3 | 3 systems × 195, llama3:8b | ✅ done |
-| Rerank A/B | Standard, retrieve-20→rerank→4 | 🔄 running (judging) |
+| Rerank A/B | Standard, retrieve-20→rerank→4 | ✅ done — AC +32%, P +13%, R +5% |
 | E2 | chunk-512/64 reindex vs 1000/100 | ⏳ queued |
 | OSS gens | gemma-3-4b (DeepInfra) + deepseek-r1:8b (local), Standard-only | ⏳ queued |
 | E4 | GPT-5.4-mini on auto-selected best pipeline (open vs closed / privacy) | ⏳ queued |

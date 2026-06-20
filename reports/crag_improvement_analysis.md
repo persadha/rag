@@ -147,6 +147,34 @@ questions are country-specific; a hard filter would risk the ~60% non-country / 
 chunks in top-4. Likewise **skip multi-query expansion** (reranking already covers retrieval) and **hold
 self-consistency** (E8 prompt + E4 generator are cheaper routes to the same generator-ceiling gain).
 
+## 5e. Fine-tuning assessment (generator / embedder / reranker)
+
+**Verdict: don't fine-tune yet — highest effort, lowest certainty, and the training-data situation is weak.**
+
+**Critical data-leakage finding.** The new 195-row eval set is a **100% exact subset of the old 300-row set**
+(`datasets/original/datasets.xlsx`): all 195 eval questions appear verbatim in the 300. So the 300
+= the 195 eval questions + 105 others. **The 300 cannot be used as training data** — it contains the entire
+test set; training on it would memorize eval answers and invalidate every metric. Only the **~105
+non-overlapping rows** are clean — too few for reliable fine-tuning (overfitting risk, little signal).
+
+**Expected gain.** Modest and uncertain. Reranking already lifted Standard AC 0.473→0.625, so the generator
+is the main remaining lever — but most of what a generator LoRA would teach (brevity, exact extraction, the
+"Sorry, I don't know" behavior) is what the **E8 prompt** achieves for ~$0. With ~105 clean examples, expect
+**low-single-digit gains at best, high variance, possibly negative**. Nothing like reranking's +32%.
+Embedder/reranker fine-tuning hits diminishing returns too (off-the-shelf reranking already reached P≈0.84).
+
+**If pursued anyway, requirements:**
+1. Clean split — ~105 non-eval rows + **synthetic QA generated from the corpus PDFs** (target ~500–1,000);
+   the 195 eval set held out, never trained on.
+2. Generator training format = **(question + retrieved context → answer)**, not bare (Q→A), to teach
+   grounding rather than hallucination.
+3. GPU (~16 GB for 8B QLoRA) + tooling (Unsloth / Axolotl / HF PEFT+TRL; sentence-transformers for
+   embedder/reranker), LoRA→GGUF merge for Ollama serving, and held-out eval vs the reranked baseline.
+
+**Recommendation:** exhaust the cheap levers first (reranking ✓, E8 prompt, E4 generator swap, off-the-shelf
+reranker/embedder upgrades). Consider a generator QLoRA only if a clear generation gap remains after E4/E8
+**and** enough clean synthetic training data can be produced — with modest expectations.
+
 ## 6. Hyperparameter findings (retrieval-only sweep, no LLM)
 
 Measured on the index + 195-row gold contexts (`reference_context`), 100-row sample for the rank sweep.
