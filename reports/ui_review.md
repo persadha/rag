@@ -1,5 +1,9 @@
 # UI review — `streamlit_app_auto.py`
 
+> **Note:** the UI file was later renamed to `pirls_rag_ui.py`. References below
+> to `streamlit_app_auto.py` and their line numbers are preserved as the
+> historical record of commit `05f6758`.
+>
 > plans.md item 5. Review of the Streamlit UI as committed in `05f6758`
 > (the as-provided baseline). Line numbers refer to that version. Each issue
 > lists the fix applied on branch RAG-2. Date: 2026-06-12.

@@ -74,8 +74,10 @@ class APIConfig:
                               temperature=0, max_tokens=1024, max_retries=5)
         elif name == "ollama":
             from langchain_ollama import ChatOllama
+            from src.config.config import Config
             chat = ChatOllama(model=APIConfig.OLLAMA_GENERATOR_MODEL,
-                              temperature=0, num_ctx=8192)
+                              temperature=0, num_ctx=8192,
+                              base_url=Config.OLLAMA_BASE_URL)
         elif name == "gemma-deepinfra":
             from langchain_openai import ChatOpenAI
             api_key = os.getenv("DEEPINFRA_API_KEY") or os.getenv("JUDGE_API_KEY")
@@ -99,5 +101,7 @@ class APIConfig:
     def get_ollama_slm():
         """Small local grader (CRAG/CRAG++ design parity: gemma3:1b)."""
         from langchain_ollama import ChatOllama
-        chat = ChatOllama(model=APIConfig.OLLAMA_SLM_MODEL, temperature=0)
+        from src.config.config import Config
+        chat = ChatOllama(model=APIConfig.OLLAMA_SLM_MODEL, temperature=0,
+                          base_url=Config.OLLAMA_BASE_URL)
         return chat | StrOutputParser()

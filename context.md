@@ -487,7 +487,7 @@ Staged execution of `plans.md`; full plan with pass criteria lives in the sessio
 Decisions: CRAG frozen at evaluated design (ADR 0001); new 4th architecture **CRAG++**; eval =
 3 systems × 2 generators (claude-haiku-4-5 / Llama 3.1 8B via Groq) × 300 rows, judge gpt-4.1
 (DeepEval, 4 metrics) — full runs deferred to a dedicated session; Streamlit UI
-(`streamlit_app_auto.py`) gets review + repair + chunk/score inspector.
+(`pirls_rag_ui.py`, formerly `streamlit_app_auto.py`) gets review + repair + chunk/score inspector.
 
 - [x] **Stage 1 — CRAG baseline restore.** Reverted P1 per-sub-question retrieval in
   `advrag_nodes.plan_sub_steps` (sub-questions reuse original docs again); removed retriever
@@ -516,7 +516,7 @@ Decisions: CRAG frozen at evaluated design (ADR 0001); new 4th architecture **CR
   envelope — consider gpt-4.1-mini ≈ $20 if budget matters).*
 - [x] **Stage 5 — UI review + repair + inspector.** `reports/ui_review.md` (13 issues with
   file:line — 5 blocking: nonexistent `process_urls`/`create_retriever`, empty `DEFAULT_URLS`,
-  session-state deletion every rerun, wrong result key). `streamlit_app_auto.py` rewritten:
+  session-state deletion every rerun, wrong result key). `pirls_rag_ui.py` rewritten:
   loads persisted chroma_db, sidebar architecture selector (Standard/CRAG/CRAG++) + Ollama
   model selector, answer card with latency/chunk count, retrieved-chunk inspector with vector
   distances + "contexts actually used" view, history capped at 10. Verified: headless boot

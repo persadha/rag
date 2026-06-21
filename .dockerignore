@@ -1,0 +1,15 @@
+.venv/
+.git/
+__pycache__/
+*.pyc
+*.log
+.env
+results/
+reports/
+datasets/
+notebooks/
+tests/
+scripts/
+docs/
+*.md
+chroma_db/*.log

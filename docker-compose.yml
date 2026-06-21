@@ -1,0 +1,40 @@
+# Self-contained PIRLS RAG stack: the Streamlit app + a bundled Ollama server.
+#
+#   docker compose up -d
+#   # one-time: pull the local models you want selectable in the sidebar
+#   docker compose exec ollama ollama pull llama3:8b
+#   docker compose exec ollama ollama pull gemma3:1b
+#   # then open http://localhost:8501
+#
+# API generators/graders (haiku, openai-mini, gemma-deepinfra, llama-groq) read
+# their keys from .env. Create an empty .env if you only use local models.
+
+services:
+  ollama:
+    image: ollama/ollama:latest
+    volumes:
+      - ollama_models:/root/.ollama
+    ports:
+      - "11434:11434"
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  app:
+    build: .
+    depends_on:
+      ollama:
+        condition: service_healthy
+    env_file:
+      - .env
+    environment:
+      - OLLAMA_BASE_URL=http://ollama:11434
+    ports:
+      - "8501:8501"
+    restart: unless-stopped
+
+volumes:
+  ollama_models:

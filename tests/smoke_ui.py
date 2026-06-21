@@ -6,6 +6,8 @@ chunk/distance inspector rendered. CRAG and CRAG++ exercise the same app
 functions directly (get_graph + extract) to keep CPU runtime reasonable.
 
 Run:  .venv\\Scripts\\python tests\\smoke_ui.py   (needs chroma_db + local Ollama)
+
+Tests pirls_rag_ui.py (formerly streamlit_app_auto.py).
 """
 
 import sys
@@ -21,7 +23,7 @@ QUESTION = ("Which month is set aside each year in the UAE for nationwide "
 def test_standard_through_widgets():
     from streamlit.testing.v1 import AppTest
 
-    at = AppTest.from_file(str(ROOT / "streamlit_app_auto.py"), default_timeout=600)
+    at = AppTest.from_file(str(ROOT / "pirls_rag_ui.py"), default_timeout=600)
     at.run()
     assert not at.exception, f"app failed to start: {at.exception}"
 
@@ -40,9 +42,10 @@ def test_standard_through_widgets():
 
 
 def test_graph_functions(architecture):
-    import streamlit_app_auto as app
+    import pirls_rag_ui as app
 
-    graph = app.get_graph(architecture, "llama3:8b")
+    graph = app.get_graph(architecture, "local", "llama3:8b", "local", "gemma3:1b",
+                          "chroma_db", False, app.DEFAULT_CANDIDATES)
     result = graph.run(QUESTION)
     answer, docs = app.extract(architecture, result)
     assert answer.strip(), f"{architecture}: empty answer"

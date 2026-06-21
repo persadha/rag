@@ -14,6 +14,9 @@ class Config:
     # DEFAULT_EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "nomic-embed-text")
     DEFAULT_CHUNK_SIZE = int(os.getenv("CHUNK_SIZE", "1000"))
     DEFAULT_CHUNK_OVERLAP = int(os.getenv("CHUNK_OVERLAP", "100"))
+    # Where the Ollama server lives. Default is the local daemon; inside Docker
+    # Compose this is set to http://ollama:11434 so the app reaches the service.
+    OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
     
 
     # Default URLs and TXTs (replace with your actual data if needed)
