@@ -34,6 +34,14 @@ class APIConfig:
     DEEPINFRA_BASE_URL = os.getenv("DEEPINFRA_BASE_URL", "https://api.deepinfra.com/v1/openai")
     GEMMA_DEEPINFRA_MODEL = os.getenv("GEMMA_DEEPINFRA_MODEL", "google/gemma-3-4b-it")
 
+    # Additional DeepInfra generators exposed in the UI. The default slugs are
+    # best-guess org/model ids — verify each against DeepInfra's catalog and
+    # override via the env var if it differs.
+    GLM_DEEPINFRA_MODEL = os.getenv("GLM_DEEPINFRA_MODEL", "zai-org/GLM-5.2")
+    KIMI_DEEPINFRA_MODEL = os.getenv("KIMI_DEEPINFRA_MODEL", "moonshotai/Kimi-K2.7-Code")
+    NEMOTRON_DEEPINFRA_MODEL = os.getenv("NEMOTRON_DEEPINFRA_MODEL", "nvidia/NVIDIA-Nemotron-3-Ultra-550B-A55B")
+    DEEPSEEK_V4_DEEPINFRA_MODEL = os.getenv("DEEPSEEK_V4_DEEPINFRA_MODEL", "deepseek-ai/DeepSeek-V4-Pro")
+
     # Closed-model comparison (E4): GPT-5.4-mini via OpenAI. Reasoning model — no temperature,
     # reasoning_effort kept low for a fair vs. non-reasoning open models comparison + lower cost.
     OPENAI_MINI_MODEL = os.getenv("OPENAI_MINI_MODEL", "gpt-5.4-mini")
@@ -95,6 +103,20 @@ class APIConfig:
                               reasoning_effort=APIConfig.OPENAI_MINI_REASONING, max_retries=5)
         else:
             raise ValueError(f"Unknown generator '{name}'; expected one of {APIConfig.GENERATOR_NAMES}")
+        return chat | StrOutputParser()
+
+    @staticmethod
+    def get_deepinfra_generator(model_id: str):
+        """Any DeepInfra-hosted model via the OpenAI-compatible API (temp=0).
+
+        Generalizes the gemma-deepinfra path so arbitrary DeepInfra model ids can
+        be selected (e.g. from the UI) without a dedicated branch each."""
+        from langchain_openai import ChatOpenAI
+        api_key = os.getenv("DEEPINFRA_API_KEY") or os.getenv("JUDGE_API_KEY")
+        if not api_key:
+            raise RuntimeError("DEEPINFRA_API_KEY (or JUDGE_API_KEY) not set for DeepInfra models")
+        chat = ChatOpenAI(model=model_id, base_url=APIConfig.DEEPINFRA_BASE_URL,
+                          api_key=api_key, temperature=0, max_tokens=1024, max_retries=5)
         return chat | StrOutputParser()
 
     @staticmethod

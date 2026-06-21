@@ -38,6 +38,10 @@ GENERATORS = {
     "llama-groq (Groq)": ("api", "llama-groq"),
     "gemma-deepinfra (gemma-3-4b)": ("api", "gemma-deepinfra"),
     "openai-mini (gpt-5.4-mini)": ("api", "openai-mini"),
+    "GLM-5.2 (DeepInfra)": ("deepinfra", APIConfig.GLM_DEEPINFRA_MODEL),
+    "Kimi-K2.7-Code (DeepInfra)": ("deepinfra", APIConfig.KIMI_DEEPINFRA_MODEL),
+    "NVIDIA-Nemotron-3-Ultra-550B-A55B (DeepInfra)": ("deepinfra", APIConfig.NEMOTRON_DEEPINFRA_MODEL),
+    "DeepSeek-V4-Pro (DeepInfra)": ("deepinfra", APIConfig.DEEPSEEK_V4_DEEPINFRA_MODEL),
 }
 
 # Grader (slm) for CRAG/CRAG++ document + generation grading. Default gemma3:1b
@@ -50,6 +54,10 @@ GRADERS = {
     "llama-groq (Groq)": ("api", "llama-groq"),
     "gemma-deepinfra (gemma-3-4b)": ("api", "gemma-deepinfra"),
     "openai-mini (gpt-5.4-mini)": ("api", "openai-mini"),
+    "GLM-5.2 (DeepInfra)": ("deepinfra", APIConfig.GLM_DEEPINFRA_MODEL),
+    "Kimi-K2.7-Code (DeepInfra)": ("deepinfra", APIConfig.KIMI_DEEPINFRA_MODEL),
+    "NVIDIA-Nemotron-3-Ultra-550B-A55B (DeepInfra)": ("deepinfra", APIConfig.NEMOTRON_DEEPINFRA_MODEL),
+    "DeepSeek-V4-Pro (DeepInfra)": ("deepinfra", APIConfig.DEEPSEEK_V4_DEEPINFRA_MODEL),
 }
 
 # index label -> chroma directory (both built by scripts/build_index.py, same embeddings)
@@ -74,7 +82,9 @@ def build_llm(kind: str, value: str):
         chat = ChatOllama(model=value, temperature=0, num_ctx=8192,
                           base_url=Config.OLLAMA_BASE_URL)
         return chat | StrOutputParser()
-    return APIConfig.get_generator(value)  # may raise RuntimeError if key missing
+    if kind == "deepinfra":  # arbitrary DeepInfra model id
+        return APIConfig.get_deepinfra_generator(value)
+    return APIConfig.get_generator(value)  # named API generator; may raise if key missing
 
 
 @st.cache_resource
