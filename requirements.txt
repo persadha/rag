@@ -17,5 +17,9 @@ langchain-huggingface
 langchain-experimental
 # Retrievers
 rank_bm25
-# Reranker
+# Reranker (cross-encoder via sentence-transformers; flashrank kept for reference, unused)
 flashrank
+sentence-transformers
+# Hosted generators / graders (haiku, llama-groq, gemma-deepinfra, openai-mini)
+langchain-openai
+langchain-anthropic

@@ -50,7 +50,7 @@ class AdVRagNodes:
         try:
             # Example expected format: {"sub_question_1": {"query": "...", "id": "1"}, ...}
             parsed_sub_questions = json.loads(re.findall(pattern, sub_questions_str)[0])
-        except json.JSONDecodeError:
+        except (json.JSONDecodeError, IndexError):  # IndexError: regex found no {...} at all
             print(f"Warning: LLM did not return valid JSON for sub-questions: {sub_questions_str}. Using original question as a single sub-question.")
             # Fallback: if not JSON, use original question as a single sub-question
             parsed_sub_questions = {"sub_question_1": {"query": question, "id": "1"}}

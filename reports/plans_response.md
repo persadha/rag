@@ -26,7 +26,11 @@ Behavioral contract proven by `tests/smoke_cragpp.py` (retrieval counts, dedup, 
 loop guard, fallback). Pilot anecdote (not a metric): on the Abu Dhabi schools question, CRAG
 answered "225 private and charter schools" (wrongly merged); CRAG++ answered "203 private + 22
 charter" — correct, because the counting sub-question retrieved its own context.
-**Measured CRAG→CRAG++ deltas: PENDING r3.**
+**Measured CRAG→CRAG++ deltas (r3, n=195, llama3:8b, gpt-oss-120b judge):** CRAG++ did **not**
+improve on CRAG — it regressed. Ctx Precision 0.690→**0.449**, Ctx Recall 0.671→0.650,
+Answer Correctness 0.474→**0.334**, Faithfulness 0.948→0.910 (Gold-Ctx Sim ~flat 0.717→0.712).
+The per-sub-question retrieval + dedup widened context at the cost of precision, and answer quality
+fell with it. The pilot anecdote above did not generalize. See `context.md` §2.0.
 
 ## 2. Why the RAGAS evaluation could not be completed
 
@@ -64,8 +68,21 @@ total) it runs from this CPU-only laptop — or fully offline via the local-Olla
 (llama3:8b + gemma3:1b): 35 rows across the three systems, **0 empty answers**, all contexts
 logged as chunk lists, all 4 metrics numeric through an Ollama judge. Operational latencies
 (CPU): 18 s/row Standard, 67 s CRAG, 98 s CRAG++.
-**Full-run scores: PENDING r3** (needs `.env` with `ANTHROPIC_API_KEY`, `GROQ_API_KEY`,
-`OPENAI_API_KEY`; see `.env.example`).
+**Full-run scores (r3, done 2026-06-20).** Rescoped to **open-source end-to-end** on a revised
+195-row dataset: local Ollama **llama3:8b** generation (3 systems × 195, 0 empty answers), judge
+**`gpt-oss-120b` via DeepInfra** (Groq's pay-per-token tier was waitlisted; the `compat:` judge in
+`run_eval.py` works with any OpenAI-compatible host). A 5th, judge-free **Gold-Context Similarity**
+metric (cosine vs the dataset's gold `reference_context`) was added.
+
+| System | Ctx Precision | Ctx Recall | Faithfulness | Answer Correctness | Gold-Ctx Sim |
+|---|---|---|---|---|---|
+| standard | **0.741** | **0.796** | 0.939 | **0.473** | **0.741** |
+| crag | 0.690 | 0.671 | **0.948** | **0.474** | 0.717 |
+| cragpp | 0.449 | 0.650 | 0.910 | 0.334 | 0.712 |
+
+**Standard wins or ties on every metric; CRAG ≈ Standard on answer quality; CRAG++ regresses.**
+2,925 cells scored, 1 null (99.97%). Per-data_type split and artifacts in `results/eval_r3_summary.xlsx`
++ `results/eval_r3_*_deepeval.csv`. Full discussion: `context.md` §2.0.
 
 ## 4. GPU access + retrieval-quality improvements
 
@@ -86,8 +103,12 @@ laptop; the index rebuild took ~13 min. For future *local-model* work, in order 
 1000/100 chunks, top-4 dense retrieval):
 
 1. **Embedding upgrade — done.** Index rebuilt with `all-mpnet-base-v2` (replacing MiniLM-384).
-   Pilot retrieval looked sharp (gold chunk in top-4 on spot checks). Measured effect vs the
-   old index: PENDING r3 (the r2 numbers are the MiniLM baseline).
+   Pilot retrieval looked sharp (gold chunk in top-4 on spot checks). **r3 (mpnet) retrieval:**
+   Ctx Precision 0.741 / Ctx Recall 0.796 on Standard, and a direct Gold-Context Similarity of
+   **0.741** (max cosine of retrieved chunks vs the gold passage). A *clean* MiniLM-vs-mpnet A/B
+   isn't available (r2 used MiniLM **and** a different dataset/judge), so this isn't an isolated
+   embedding delta — but mpnet retrieval is healthy and is no longer the limiting factor; precision
+   *use* (architecture) is. See `context.md` §2.0.
 2. **Hybrid retrieval (BM25 + dense).** PIRLS questions are entity-heavy (country names,
    programme acronyms like NAPLAN) — exactly where lexical search beats embeddings.
    `rank_bm25` is already in requirements; fuse with reciprocal-rank fusion, keep top-4.
@@ -151,6 +172,8 @@ scale):
 
 ---
 
-*Pending after the dedicated eval session (r3): fill the measured-results slots in items 1, 3
-and 4.1, update `context.md` §2 with the r3 tables, and revisit recommendation 4.2/4.3
-priorities in light of the measured retrieval ceiling.*
+*r3 eval session complete (2026-06-20): measured-results slots in items 1, 3, and 4.1 are filled,
+and `context.md` §2.0 carries the r3 tables. Headline: Standard remains the strongest architecture,
+CRAG++ regressed against its design hypothesis, and retrieval-vs-gold is healthy (~0.74) — so the
+remaining lever is precision/use of context (reranking, hybrid retrieval, metadata filtering per
+4.2/4.3), not raw retrieval recall.*

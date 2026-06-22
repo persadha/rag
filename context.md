@@ -134,6 +134,41 @@ reranking). This is *not* evidence that decomposition is unnecessary — **~35% 
 where a *correctly-implemented* decomposition should help; CRAG simply implements it wrong (decompose-but-reuse, no
 re-retrieval).
 
+### 2.0 Pass 3 — r3 (open-source end-to-end, revised dataset; 2026-06-20)
+
+A **within-pass controlled** comparison: identical dataset, judge, embeddings, and retrieval —
+only the architecture varies. **Not row-comparable to Pass 1/2** (different dataset, judge, and
+embeddings), but the standard-vs-CRAG-vs-CRAG++ contrast inside Pass 3 is clean.
+
+**Setup.** 195-question revised dataset (`datasets/revision/evaluation_dataset.xlsx`; 123 human /
+72 synthetic). Generator: local Ollama **llama3:8b** (+ gemma3:1b grader for CRAG/CRAG++). Judge:
+**`gpt-oss-120b` via DeepInfra** (OpenAI-compatible; replaced Groq, whose pay-per-token tier was
+waitlisted). Embeddings `all-mpnet-base-v2` (768-dim), top-4 dense. New 5th metric **Gold-Context
+Similarity** = max cosine between the gold `reference_context` and the retrieved chunks
+(deterministic, embedding-based, no judge cost). 2,925 metric cells scored, 1 null (99.97%).
+
+**Pass 3 — DeepEval (n=195 per system)**
+
+| System | Ctx Precision | Ctx Recall | Faithfulness | Answer Correctness | Gold-Ctx Sim |
+|---|---|---|---|---|---|
+| standard | **0.741** | **0.796** | 0.939 | **0.473** | **0.741** |
+| crag | 0.690 | 0.671 | **0.948** | **0.474** | 0.717 |
+| cragpp | 0.449 | 0.650 | 0.910 | 0.334 | 0.712 |
+
+Answer correctness by data_type (human / synthetic): standard 0.529 / 0.378; crag 0.477 / 0.468;
+cragpp 0.309 / 0.376. Full split in `results/eval_r3_summary.xlsx`.
+
+**Findings.**
+- **Standard still wins** — best on 4 of 5 metrics; CRAG ties it only on answer correctness (0.474
+  vs 0.473). The Pass-1/2 "simple beats advanced" result holds on a fresh dataset and a stronger judge.
+- **CRAG++ underperforms both**, contradicting the design hypothesis — Ctx Precision collapses to
+  0.449 and answer correctness to 0.334. Its per-sub-question retrieval + dedup widens the context
+  but lowers precision (more, noisier chunks), and answer quality falls with it.
+- **Gold-Context Similarity is flat (~0.71–0.74) across all three** — retrieval surfaces comparable
+  ground-truth overlap regardless of architecture. The differences are in **how each pipeline uses
+  context, not raw retrieval vs. gold** — so the lever stays *precision / use of context*, not recall.
+- Faithfulness ~0.91–0.95 everywhere (answers stay grounded), consistent with Pass 2.
+
 ### 2.1 Architecture comparison — Standard vs Auto vs CRAG
 
 Strong/weak summary (the underlying bugs are detailed in §4):
@@ -452,7 +487,7 @@ Staged execution of `plans.md`; full plan with pass criteria lives in the sessio
 Decisions: CRAG frozen at evaluated design (ADR 0001); new 4th architecture **CRAG++**; eval =
 3 systems × 2 generators (claude-haiku-4-5 / Llama 3.1 8B via Groq) × 300 rows, judge gpt-4.1
 (DeepEval, 4 metrics) — full runs deferred to a dedicated session; Streamlit UI
-(`streamlit_app_auto.py`) gets review + repair + chunk/score inspector.
+(`pirls_rag_ui.py`, formerly `streamlit_app_auto.py`) gets review + repair + chunk/score inspector.
 
 - [x] **Stage 1 — CRAG baseline restore.** Reverted P1 per-sub-question retrieval in
   `advrag_nodes.plan_sub_steps` (sub-questions reuse original docs again); removed retriever
@@ -481,7 +516,7 @@ Decisions: CRAG frozen at evaluated design (ADR 0001); new 4th architecture **CR
   envelope — consider gpt-4.1-mini ≈ $20 if budget matters).*
 - [x] **Stage 5 — UI review + repair + inspector.** `reports/ui_review.md` (13 issues with
   file:line — 5 blocking: nonexistent `process_urls`/`create_retriever`, empty `DEFAULT_URLS`,
-  session-state deletion every rerun, wrong result key). `streamlit_app_auto.py` rewritten:
+  session-state deletion every rerun, wrong result key). `pirls_rag_ui.py` rewritten:
   loads persisted chroma_db, sidebar architecture selector (Standard/CRAG/CRAG++) + Ollama
   model selector, answer card with latency/chunk count, retrieved-chunk inspector with vector
   distances + "contexts actually used" view, history capped at 10. Verified: headless boot
@@ -491,6 +526,11 @@ Decisions: CRAG frozen at evaluated design (ADR 0001); new 4th architecture **CR
   plans.md items (architecture, RAGAS diagnosis, eval design + model recommendations, GPU +
   retrieval-quality roadmap, UI review, context logging + production readiness). Everything
   dependent on the full runs is marked PENDING r3.
-- [ ] **DEFERRED — full eval runs (separate session).** Needs `.env` keys. Run per system ×
-  generator: `scripts/run_generation.py` then `scripts/run_eval.py`; 10–15-row pilot with real
-  judge-cost extrapolation first; then fill the r3 slots in `reports/plans_response.md` and §2.
+- [x] **Stage 7 — full eval runs (r3), done 2026-06-20.** Open-source end-to-end on the revised
+  195-row dataset (`datasets/revision/evaluation_dataset.xlsx`): local Ollama llama3:8b generation
+  (3 systems × 195 rows, 0 empty), judge `gpt-oss-120b` via **DeepInfra** (Groq waitlisted), new
+  Gold-Context Similarity metric. 15-row pilot gate passed first. Results + findings in §2.0; r3
+  slots in `reports/plans_response.md` filled. Scores force-added (`results/eval_r3_*_deepeval.csv`,
+  `eval_r3_summary.xlsx`). Code: schema bridge + `id` row_id in `run_generation.py`, `compat:` judge
+  + cosine metric in `run_eval.py`, `scripts/summarize_r3.py`, CRAG `IndexError` crash-fix in
+  `advrag_nodes.py`.
