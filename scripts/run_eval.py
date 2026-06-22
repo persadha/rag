@@ -60,7 +60,7 @@ def make_judge(judge: str):
         if not api_key:
             raise RuntimeError("compat judge needs JUDGE_API_KEY in .env")
         return LocalModel(model=judge.split(":", 1)[1], base_url=base_url,
-                          api_key=api_key, temperature=0)
+                          api_key=api_key, temperature=0, timeout=60)
     return judge
 
 
@@ -102,6 +102,12 @@ def main():
     parser.add_argument("--gen", required=True, help="generation CSV from run_generation.py")
     parser.add_argument("--rows", type=int, default=None, help="limit to first N rows (pilot)")
     parser.add_argument("--judge", default=APIConfig.JUDGE_MODEL)
+    parser.add_argument("--metrics", default=None,
+                        help="comma-separated subset of judge metrics to run "
+                             "(contextual_precision,contextual_recall,faithfulness,answer_correctness). "
+                             "Default = all. Use 'answer_correctness' for closed-book / retrieval-only "
+                             "baselines where context metrics are meaningless and would error. "
+                             "gold_context_similarity is always computed (free, no judge).")
     args = parser.parse_args()
 
     gen_path = Path(args.gen)
@@ -116,6 +122,13 @@ def main():
         print(f"Resuming: {len(done)} rows already scored in {out_path.name}")
 
     metrics = make_metrics(make_judge(args.judge))
+    if args.metrics:
+        requested = [m.strip() for m in args.metrics.split(",") if m.strip()]
+        unknown = [m for m in requested if m not in metrics]
+        if unknown:
+            sys.exit(f"Unknown --metrics {unknown}; choose from {list(metrics)}")
+        metrics = {k: v for k, v in metrics.items() if k in requested}
+        print(f"Metric subset: {list(metrics)} (+ gold_context_similarity, free)")
     embedder = HuggingFaceEmbeddings(model_name=Config.DEFAULT_EMBEDDING_MODEL)
     has_ref_ctx = "reference_context" in df.columns
     total_cost, failures = 0.0, 0
@@ -158,6 +171,8 @@ def main():
     scored = pd.read_csv(out_path)
     print(f"\nSUMMARY {gen_path.stem} (n={len(scored)}, judge={args.judge}):")
     for col in METRIC_COLUMNS:
+        if col not in scored.columns:  # skipped via --metrics
+            continue
         print(f"  {col:22s} mean={scored[col].mean():.3f}  null={scored[col].isna().sum()}")
     print(f"  metric failures this run: {failures}")
     print(f"  judge cost this run: ${total_cost:.2f}")

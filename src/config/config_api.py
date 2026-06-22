@@ -51,7 +51,17 @@ class APIConfig:
     OLLAMA_GENERATOR_MODEL = os.getenv("OLLAMA_GENERATOR_MODEL", "llama3:8b")
     OLLAMA_SLM_MODEL = os.getenv("OLLAMA_SLM_MODEL", "gemma3:1b")
 
-    GENERATOR_NAMES = ("haiku", "llama-groq", "ollama", "gemma-deepinfra", "openai-mini")
+    # DeepInfra models selectable as CLI generators (short name -> model slug),
+    # mirroring the four added to the UI dropdowns.
+    DEEPINFRA_EXTRA = {
+        "glm": GLM_DEEPINFRA_MODEL,
+        "kimi": KIMI_DEEPINFRA_MODEL,
+        "nemotron": NEMOTRON_DEEPINFRA_MODEL,
+        "deepseek-v4": DEEPSEEK_V4_DEEPINFRA_MODEL,
+    }
+
+    GENERATOR_NAMES = ("haiku", "llama-groq", "ollama", "gemma-deepinfra",
+                       "openai-mini", "glm", "kimi", "nemotron", "deepseek-v4")
 
     # Model id shown in the gen CSV per generator (for the local "ollama" path the
     # actual model comes from OLLAMA_GENERATOR_MODEL, set via env).
@@ -61,7 +71,8 @@ class APIConfig:
                 "llama-groq": APIConfig.OPENSOURCE_GENERATOR_MODEL,
                 "ollama": APIConfig.OLLAMA_GENERATOR_MODEL,
                 "gemma-deepinfra": APIConfig.GEMMA_DEEPINFRA_MODEL,
-                "openai-mini": APIConfig.OPENAI_MINI_MODEL}.get(name, name)
+                "openai-mini": APIConfig.OPENAI_MINI_MODEL,
+                **APIConfig.DEEPINFRA_EXTRA}.get(name, name)
 
     @staticmethod
     def get_generator(name: str):
@@ -83,9 +94,14 @@ class APIConfig:
         elif name == "ollama":
             from langchain_ollama import ChatOllama
             from src.config.config import Config
+            # client_kwargs timeout: a stuck request raises instead of hanging the
+            # whole (unattended) run forever — caught per-row in run_generation.
+            # Configurable (OLLAMA_TIMEOUT) since reasoning models (deepseek-r1)
+            # legitimately need longer than fast models like llama3:8b.
             chat = ChatOllama(model=APIConfig.OLLAMA_GENERATOR_MODEL,
                               temperature=0, num_ctx=8192,
-                              base_url=Config.OLLAMA_BASE_URL)
+                              base_url=Config.OLLAMA_BASE_URL,
+                              client_kwargs={"timeout": int(os.getenv("OLLAMA_TIMEOUT", "180"))})
         elif name == "gemma-deepinfra":
             from langchain_openai import ChatOpenAI
             api_key = os.getenv("DEEPINFRA_API_KEY") or os.getenv("JUDGE_API_KEY")
@@ -101,6 +117,8 @@ class APIConfig:
             # Reasoning model: omit temperature (only default supported); cap reasoning via effort.
             chat = ChatOpenAI(model=APIConfig.OPENAI_MINI_MODEL,
                               reasoning_effort=APIConfig.OPENAI_MINI_REASONING, max_retries=5)
+        elif name in APIConfig.DEEPINFRA_EXTRA:
+            return APIConfig.get_deepinfra_generator(APIConfig.DEEPINFRA_EXTRA[name])
         else:
             raise ValueError(f"Unknown generator '{name}'; expected one of {APIConfig.GENERATOR_NAMES}")
         return chat | StrOutputParser()
