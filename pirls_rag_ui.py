@@ -1,16 +1,21 @@
-"""Streamlit UI for the PIRLS RAG system — experiment playground.
+"""Streamlit UI for the PIRLS RAG assistant (production configuration).
 
 Run:  streamlit run pirls_rag_ui.py
 
-Requires a persisted index (python scripts/build_index.py) and, for the local
-generators/graders, an Ollama server (OLLAMA_BASE_URL, default localhost:11434).
-The sidebar exposes every r3 / E-series lever live: architecture, generator
-(local + API), grader model (CRAG/CRAG++), index/chunking, cross-encoder
-reranking, and the extraction-prompt A/B. Every answer shows the retrieved
-chunks with their vector distance to the question (retrieval inspection,
-plans.md item 6). Bug history: reports/ui_review.md.
+Wired to the best architecture combination found across r3 (experiments E1–E12):
+**Standard RAG + hybrid (BM25+dense+RRF) retrieval + bge-reranker-base**, the
+default, with a local Ollama generator (llama3:8b). The benchmarked underperformers
+(CRAG / CRAG++ architectures, the extraction-prompt A/B, the chunk-size and grader
+levers) are removed. Users choose between **open** local models (private, on-device
+via Ollama) and **closed** cloud models (higher accuracy), and can **attach files**
+(PDF / DOCX / TXT) to ask questions over their own documents alongside the corpus.
+
+Requires a persisted index (python scripts/build_index.py); local models need an
+Ollama server (OLLAMA_BASE_URL, default localhost:11434); closed models need keys
+in .env. Best results to date: gpt-5.4-mini AC 0.774, llama3:8b 0.689 (n=195).
 """
 
+import hashlib
 import os
 import sys
 import time
@@ -20,79 +25,58 @@ from dotenv import load_dotenv
 import streamlit as st
 
 sys.path.append(str(Path(__file__).parent))
-load_dotenv()  # API keys for the hosted generators/graders
+load_dotenv()  # API keys for the closed (cloud) models
 
 from src.config.config import Config
 from src.config.config_api import APIConfig
 from src.utils.text import strip_reasoning
+from src.utils.docloader import SUPPORTED_EXTENSIONS, files_to_documents
 
-ARCHITECTURES = ("Standard", "CRAG", "CRAG++")
+# --- Production configuration (the winning combination) ---------------------
+PERSIST_DIR = "chroma_db"               # 1000/100 index used by the best runs
+RETRIEVER_K = 4                          # chunks handed to the generator
+CANDIDATES = 20                          # first-stage pool feeding the reranker
+RERANKER_MODEL = "BAAI/bge-reranker-base"  # best reranker under hybrid (E9–E12)
 
-# label -> (kind, value). kind "local" builds a ChatOllama; "api" routes through
-# APIConfig.get_generator. Both yield a `runnable | StrOutputParser()`.
-GENERATORS = {
-    "llama3:8b (local)": ("local", "llama3:8b"),
-    "gemma3:4b (local)": ("local", "gemma3:4b"),
-    "deepseek-r1:8b (local)": ("local", "deepseek-r1:8b"),
-    "haiku (Anthropic)": ("api", "haiku"),
-    "llama-groq (Groq)": ("api", "llama-groq"),
-    "gemma-deepinfra (gemma-3-4b)": ("api", "gemma-deepinfra"),
-    "openai-mini (gpt-5.4-mini)": ("api", "openai-mini"),
-    "GLM-5.2 (DeepInfra)": ("deepinfra", APIConfig.GLM_DEEPINFRA_MODEL),
-    "Kimi-K2.7-Code (DeepInfra)": ("deepinfra", APIConfig.KIMI_DEEPINFRA_MODEL),
-    "NVIDIA-Nemotron-3-Ultra-550B-A55B (DeepInfra)": ("deepinfra", APIConfig.NEMOTRON_DEEPINFRA_MODEL),
-    "DeepSeek-V4-Pro (DeepInfra)": ("deepinfra", APIConfig.DEEPSEEK_V4_DEEPINFRA_MODEL),
+# Open = local via Ollama (private, on-device). The selectable models are discovered
+# at runtime from the local Ollama server (equivalent to `ollama list`), so any pulled
+# model can be chosen. llama3:8b is preferred as the default when present (best open
+# model on hybrid retrieval, AC 0.689).
+PREFERRED_LOCAL_DEFAULT = "llama3:8b"
+# Closed = cloud API (higher accuracy, data leaves the machine). label -> APIConfig name.
+CLOSED_MODELS = {
+    "GPT-5.4-mini  (OpenAI)": "openai-mini",       # best overall (AC 0.774)
+    "Claude Haiku  (Anthropic)": "haiku",
 }
 
-# Grader (slm) for CRAG/CRAG++ document + generation grading. Default gemma3:1b
-# preserves the frozen CRAG design; any generator-class model can stand in.
-GRADERS = {
-    "gemma3:1b (local)": ("local", "gemma3:1b"),
-    "llama3:8b (local)": ("local", "llama3:8b"),
-    "gemma3:4b (local)": ("local", "gemma3:4b"),
-    "haiku (Anthropic)": ("api", "haiku"),
-    "llama-groq (Groq)": ("api", "llama-groq"),
-    "gemma-deepinfra (gemma-3-4b)": ("api", "gemma-deepinfra"),
-    "openai-mini (gpt-5.4-mini)": ("api", "openai-mini"),
-    "GLM-5.2 (DeepInfra)": ("deepinfra", APIConfig.GLM_DEEPINFRA_MODEL),
-    "Kimi-K2.7-Code (DeepInfra)": ("deepinfra", APIConfig.KIMI_DEEPINFRA_MODEL),
-    "NVIDIA-Nemotron-3-Ultra-550B-A55B (DeepInfra)": ("deepinfra", APIConfig.NEMOTRON_DEEPINFRA_MODEL),
-    "DeepSeek-V4-Pro (DeepInfra)": ("deepinfra", APIConfig.DEEPSEEK_V4_DEEPINFRA_MODEL),
-}
-
-# index label -> chroma directory (both built by scripts/build_index.py, same embeddings)
-INDEXES = {
-    "1000 / 100  (chroma_db)": "chroma_db",
-    "512 / 64  (chroma_db_512)": "chroma_db_512",
-}
-
-RETRIEVER_K = 4
-DEFAULT_CANDIDATES = 20
-
-st.set_page_config(page_title="PIRLS RAG Search", page_icon="📚", layout="centered")
+st.set_page_config(page_title="PIRLS RAG Assistant", page_icon="📚", layout="centered")
 
 
-def build_llm(kind: str, value: str):
-    """Return a string-output runnable for a local Ollama model or an API generator.
+# --- Local model discovery --------------------------------------------------
+@st.cache_data(ttl=30)
+def list_ollama_models():
+    """Models installed on the local Ollama server (like `ollama list`), via its
+    /api/tags endpoint. Cached briefly so newly pulled models appear without a
+    restart. Returns [] if Ollama is unreachable."""
+    import json
+    import urllib.request
+    url = Config.OLLAMA_BASE_URL.rstrip("/") + "/api/tags"
+    try:
+        with urllib.request.urlopen(url, timeout=5) as resp:
+            data = json.load(resp)
+        names = [m["name"] for m in data.get("models", []) if m.get("name")]
+        # Drop embedding-only models — they can't generate chat answers, so picking
+        # one as the generator would only error. (Heuristic: "embed" in the name.)
+        return sorted(n for n in names if "embed" not in n.lower())
+    except Exception:
+        return []
 
-    Shared by the generator and grader selectors so there is one code path."""
-    if kind == "local":
-        from langchain_ollama import ChatOllama
-        from langchain_core.output_parsers import StrOutputParser
-        chat = ChatOllama(model=value, temperature=0, num_ctx=8192,
-                          base_url=Config.OLLAMA_BASE_URL)
-        return chat | StrOutputParser()
-    if kind == "deepinfra":  # arbitrary DeepInfra model id
-        return APIConfig.get_deepinfra_generator(value)
-    return APIConfig.get_generator(value)  # named API generator; may raise if key missing
 
-
+# --- Cached heavy resources -------------------------------------------------
 @st.cache_resource
 def load_store(persist_dir: str):
-    """Load a persisted Chroma index (built once by scripts/build_index.py)."""
     from langchain_huggingface import HuggingFaceEmbeddings
     from src.vectorstore.vectorstore import VectorStore
-
     full_dir = str(Path(__file__).parent / persist_dir)
     embeddings = HuggingFaceEmbeddings(model_name=Config.DEFAULT_EMBEDDING_MODEL)
     store = VectorStore(embeddings, persist_directory=full_dir)
@@ -101,88 +85,166 @@ def load_store(persist_dir: str):
 
 
 @st.cache_resource
-def get_graph(architecture: str, gen_kind: str, gen_value: str,
-              grader_kind: str, grader_value: str,
-              persist_dir: str, rerank: bool, candidates: int):
-    """Build the selected graph once per unique lever combination."""
+def get_corpus_hybrid(persist_dir: str, k_each: int):
+    """Hybrid BM25+dense retriever over the whole corpus (BM25 index built once)."""
+    from src.vectorstore.hybrid import HybridRetriever, build_bm25_corpus
     store = load_store(persist_dir)
+    corpus = build_bm25_corpus(store)
+    return HybridRetriever(store.get_retriever(k=k_each), corpus, k_each=k_each)
 
-    base = store.get_retriever(k=candidates if rerank else RETRIEVER_K)
-    if rerank:
+
+@st.cache_resource
+def load_cross_encoder(model_name: str):
+    from sentence_transformers import CrossEncoder
+    return CrossEncoder(model_name)
+
+
+@st.cache_resource
+def build_uploaded_retriever(sig: str, _docs, k: int):
+    """In-memory dense retriever over the user's uploaded chunks. `sig` (content
+    hash) is the cache key; `_docs` is underscore-prefixed so Streamlit doesn't
+    try to hash the Document list."""
+    from langchain_core.vectorstores import InMemoryVectorStore
+    store = load_store(PERSIST_DIR)  # reuse the same embedding model
+    vs = InMemoryVectorStore.from_documents(_docs, store.embeddings)
+    return vs.as_retriever(search_kwargs={"k": k})
+
+
+# --- Retriever assembly -----------------------------------------------------
+class UnionRetriever:
+    """Concatenate + dedup results from several retrievers (corpus + uploaded)."""
+    def __init__(self, retrievers):
+        self.retrievers = retrievers
+
+    def invoke(self, query: str, config=None, **kwargs):
+        seen, out = set(), []
+        for r in self.retrievers:
+            for d in r.invoke(query):
+                if d.page_content not in seen:
+                    seen.add(d.page_content)
+                    out.append(d)
+        return out
+
+    def get_relevant_documents(self, query: str):
+        return self.invoke(query)
+
+
+def build_llm(kind: str, value: str):
+    """String-output runnable for a local Ollama model ('local') or API model ('api')."""
+    if kind == "local":
+        from langchain_ollama import ChatOllama
+        from langchain_core.output_parsers import StrOutputParser
+        chat = ChatOllama(model=value, temperature=0, num_ctx=8192,
+                          base_url=Config.OLLAMA_BASE_URL)
+        return chat | StrOutputParser()
+    return APIConfig.get_generator(value)  # named API model; raises if key missing
+
+
+def build_retriever(use_hybrid: bool, uploaded_docs, sig: str, only_uploaded: bool):
+    """Assemble the query-time retriever from cached parts. The cross-encoder
+    reranker (when used) fairly selects the top-4 across corpus + uploaded chunks."""
+    store = load_store(PERSIST_DIR)
+    need_wide = use_hybrid or bool(uploaded_docs)  # wide pool only matters if we rerank
+
+    if uploaded_docs and only_uploaded:
+        base = build_uploaded_retriever(sig, uploaded_docs, CANDIDATES if need_wide else RETRIEVER_K)
+    else:
+        if use_hybrid:
+            corpus = get_corpus_hybrid(PERSIST_DIR, CANDIDATES)
+        else:
+            corpus = store.get_retriever(k=CANDIDATES if need_wide else RETRIEVER_K)
+        if uploaded_docs:
+            up = build_uploaded_retriever(sig, uploaded_docs, CANDIDATES)
+            base = UnionRetriever([corpus, up])
+        else:
+            base = corpus
+
+    if need_wide:
         from src.vectorstore.rerank import RerankRetriever
-        retriever = RerankRetriever(base, top_k=RETRIEVER_K)
-    else:
-        retriever = base
+        return RerankRetriever(base, top_k=RETRIEVER_K,
+                               cross_encoder=load_cross_encoder(RERANKER_MODEL))
+    return base  # plain dense top-4
 
-    llm = build_llm(gen_kind, gen_value)
 
-    if architecture == "Standard":
-        from src.graph_builder.graph_builder import GraphBuilder
-        builder = GraphBuilder(retriever=retriever, llm=llm)
-    else:
-        slm = build_llm(grader_kind, grader_value)  # CRAG/CRAG++ grader
-        if architecture == "CRAG":
-            from src.graph_builder.graph_builder_adv import GraphBuilder
-        else:  # CRAG++
-            from src.graph_builder.graph_builder_cragpp import GraphBuilder
-        builder = GraphBuilder(retriever=retriever, llm=llm, slm=slm)
+def build_graph(retriever, gen_kind: str, gen_value: str):
+    from src.graph_builder.graph_builder import GraphBuilder
+    builder = GraphBuilder(retriever=retriever, llm=build_llm(gen_kind, gen_value))
     builder.build()
     return builder
 
 
-def extract(architecture: str, result: dict):
-    """(answer, docs actually used) per architecture — keys differ by design."""
-    if architecture == "Standard":
-        return result.get("answer", ""), result.get("retrieved_docs", [])
-    if architecture == "CRAG":
-        return result.get("final_answer", ""), result.get("documents", [])
-    return result.get("final_answer", ""), (result.get("final_contexts")
-                                            or result.get("documents", []))
-
-
 def main():
-    st.title("PIRLS Document Search")
-    st.markdown("Ask a question about the PIRLS 2021 corpus.")
+    st.title("📚 PIRLS Document Assistant")
+    st.markdown("Ask a question about the PIRLS 2021 corpus — or attach your own documents.")
 
     with st.sidebar:
-        architecture = st.selectbox("Architecture", ARCHITECTURES,
-                                    help="Standard: retrieve→generate. CRAG: graded docs + "
-                                         "sub-questions over shared context. CRAG++: CRAG + "
-                                         "per-sub-question retrieval, dedup, no word cap.")
-        is_standard = architecture == "Standard"
+        st.subheader("Model")
+        is_open = st.radio(
+            "Model type",
+            ["Open — local & private", "Closed — cloud API"],
+            index=0,
+            help="Open models run locally via Ollama; your data never leaves this machine. "
+                 "Closed models call a cloud API (higher accuracy, but data is sent to the provider).",
+        ).startswith("Open")
 
-        gen_label = st.selectbox("Generator model", list(GENERATORS),
-                                 help="Local models need Ollama; API models need keys in .env.")
-        grader_label = st.selectbox("Grader model (CRAG/CRAG++)", list(GRADERS),
-                                    disabled=is_standard,
-                                    help="Grades retrieved docs + generations. "
-                                         "Standard does no grading, so this is ignored there.")
-        index_label = st.selectbox("Index / chunking", list(INDEXES))
+        if is_open:
+            local_models = list_ollama_models()
+            if local_models:
+                default_idx = (local_models.index(PREFERRED_LOCAL_DEFAULT)
+                               if PREFERRED_LOCAL_DEFAULT in local_models else 0)
+                model_label = st.selectbox("Local Ollama model", local_models, index=default_idx,
+                                           help="Discovered from the local Ollama server "
+                                                "(`ollama list`). Pull more with `ollama pull <model>`.")
+                gen_kind, gen_value = "local", model_label
+            else:
+                st.warning("No local Ollama models found. Is the server running? "
+                           "Pull one with `ollama pull llama3:8b`, then refresh.")
+                model_label, gen_kind, gen_value = PREFERRED_LOCAL_DEFAULT, "local", PREFERRED_LOCAL_DEFAULT
+            if st.button("🔄 Refresh model list"):
+                list_ollama_models.clear()
+                st.rerun()
+        else:
+            model_label = st.selectbox("Model", list(CLOSED_MODELS))
+            gen_kind, gen_value = "api", CLOSED_MODELS[model_label]
 
-        rerank = st.checkbox("Cross-encoder reranking",
-                             help="Retrieve a wide candidate set, then rerank to the top-4 "
-                                  "with a cross-encoder. First run downloads ~80 MB.")
-        candidates = st.slider("Rerank candidates", min_value=8, max_value=50,
-                               value=DEFAULT_CANDIDATES, step=1, disabled=not rerank,
-                               help="First-stage dense pool size before reranking to top-4.")
-        extract_on = st.checkbox("Extraction prompt (Standard only)", disabled=not is_standard,
-                                 help="E8 A/B: terse fact-extraction prompt. "
-                                      "Only affects the Standard generator.")
+        st.subheader("Retrieval")
+        use_hybrid = st.checkbox(
+            "High-accuracy retrieval (hybrid + reranker)", value=True,
+            help="Hybrid BM25 + dense retrieval, reranked by a cross-encoder (bge-reranker-base). "
+                 "The best-performing configuration. Uncheck for faster, lower-accuracy dense-only search.",
+        )
 
-        st.caption(f"Retriever: top-{RETRIEVER_K} chunks, "
-                   f"{Config.DEFAULT_EMBEDDING_MODEL.split('/')[-1]} embeddings.")
+        st.subheader("Attach documents")
+        uploaded_files = st.file_uploader(
+            "PDF, DOCX, TXT", type=SUPPORTED_EXTENSIONS, accept_multiple_files=True,
+            help="Ask questions over your own files. They are processed in-memory for this "
+                 "session only and never added to the persistent index.",
+        )
+        only_uploaded = False
+        if uploaded_files:
+            only_uploaded = st.checkbox("Search only the uploaded files", value=False,
+                                        help="Ignore the PIRLS corpus and answer purely from your attachments.")
 
-    gen_kind, gen_value = GENERATORS[gen_label]
-    grader_kind, grader_value = GRADERS[grader_label]
-    persist_dir = INDEXES[index_label]
+        st.caption(f"Standard RAG · top-{RETRIEVER_K} chunks · "
+                   f"{Config.DEFAULT_EMBEDDING_MODEL.split('/')[-1]} embeddings"
+                   + (f" · reranker {RERANKER_MODEL.split('/')[-1]}" if use_hybrid else ""))
+
+    # Parse + hash uploads (cache key) once per render.
+    uploaded_docs, sig = None, ""
+    if uploaded_files:
+        pairs = [(f.name, f.getvalue()) for f in uploaded_files]
+        sig = hashlib.md5(b"".join(n.encode() + d for n, d in pairs)).hexdigest()
+        with st.spinner("Reading attached documents…"):
+            uploaded_docs = files_to_documents(pairs)
+        st.sidebar.success(f"{len(uploaded_files)} file(s) → {len(uploaded_docs)} chunks")
 
     if "history" not in st.session_state:
         st.session_state.history = []
 
     try:
-        store = load_store(persist_dir)
+        store = load_store(PERSIST_DIR)
         if store.vectorstore is None:
-            st.error(f"No index found at ./{persist_dir} — build it first:  "
+            st.error(f"No index found at ./{PERSIST_DIR} — build it first:  "
                      "`python scripts/build_index.py`")
             st.stop()
     except Exception as exc:
@@ -190,83 +252,62 @@ def main():
         st.stop()
 
     with st.form("search_form"):
-        question = st.text_input("Enter your question:",
-                                 placeholder="e.g. How is reading assessed in Flanders?")
-        submitted = st.form_submit_button("Search", type="primary")
+        question = st.text_input("Your question:",
+                                 placeholder="e.g. How is reading achievement scaled in PIRLS 2021?")
+        submitted = st.form_submit_button("Ask", type="primary")
 
     if submitted and question.strip():
         question = question.strip()
-
-        # Extraction prompt is read at generation time by RAGNodes (Standard only).
-        os.environ["GEN_PROMPT_STYLE"] = "extract" if (extract_on and is_standard) else "baseline"
-
+        os.environ["GEN_PROMPT_STYLE"] = "baseline"
         try:
-            with st.spinner(f"Running {architecture} with {gen_label}…"):
-                graph = get_graph(architecture, gen_kind, gen_value,
-                                  grader_kind, grader_value,
-                                  persist_dir, rerank, candidates)
+            with st.spinner(f"Answering with {model_label}…"):
+                retriever = build_retriever(use_hybrid, uploaded_docs, sig, only_uploaded)
+                graph = build_graph(retriever, gen_kind, gen_value)
                 start = time.time()
                 result = graph.run(question)
                 elapsed = time.time() - start
-        except RuntimeError as exc:  # missing API key, etc.
+        except RuntimeError as exc:  # missing API key for a closed model, etc.
             st.error(str(exc))
             st.stop()
         except Exception as exc:
             st.error(f"Generation failed: {exc}")
             st.stop()
 
-        answer, used_docs = extract(architecture, result)
-        answer = strip_reasoning(answer) or "(no answer produced)"
+        answer = strip_reasoning(result.get("answer", "")) or "(no answer produced)"
+        used_docs = result.get("retrieved_docs", [])
 
         st.markdown("### Answer")
         st.success(answer)
-        levers = [architecture, gen_label]
-        if not is_standard:
-            levers.append(f"grader {grader_label}")
-        levers.append(index_label.split()[0])  # chunk size
-        levers.append("rerank" if rerank else "no-rerank")
-        if is_standard:
-            levers.append("extract" if extract_on else "baseline")
-        levers.append(f"{elapsed:.1f}s")
-        levers.append(f"{len(used_docs)} chunks")
-        st.caption(" · ".join(levers))
+        tags = [model_label.split("  ")[0],
+                "hybrid+rerank" if use_hybrid else "dense",
+                f"{elapsed:.1f}s", f"{len(used_docs)} sources"]
+        if uploaded_docs:
+            tags.insert(1, "uploaded-only" if only_uploaded else "corpus+uploaded")
+        st.caption(" · ".join(tags))
 
-        # Retrieval inspection: vector distance of the top dense chunks to the question.
-        label = ("Top dense chunks (first stage, before rerank)" if rerank
-                 else "Retrieved chunks vs. question (vector distance)")
-        with st.expander(label, expanded=True):
-            st.caption("Top chunks by embedding distance to the question — "
-                       "lower distance = semantically closer."
-                       + (" Reranking then reorders these to pick the top-4 actually used."
-                          if rerank else ""))
-            scored = store.vectorstore.similarity_search_with_score(question, k=RETRIEVER_K)
-            for i, (doc, distance) in enumerate(scored, start=1):
-                source = Path(doc.metadata.get("source", "?")).name
-                page = doc.metadata.get("page", "?")
-                st.markdown(f"**[{i}] distance {distance:.3f}** — {source}, p.{page}")
-                st.code(doc.page_content, language=None, wrap_lines=True)
-
-        # What the architecture actually used can differ (grading, rerank, per-sub-question retrieval).
-        with st.expander(f"Contexts {architecture} actually used ({len(used_docs)} chunks)"):
+        # Source attribution (transparency: every answer shows the chunks it used).
+        with st.expander(f"Sources used ({len(used_docs)} chunks)", expanded=True):
             for i, doc in enumerate(used_docs, start=1):
                 source = Path(doc.metadata.get("source", "?")).name
-                page = doc.metadata.get("page", "?")
-                st.markdown(f"**[{i}]** {source}, p.{page}")
+                page = doc.metadata.get("page")
+                where = f"{source}" + (f", p.{page}" if page is not None else "")
+                badge = "📎 " if doc.metadata.get("source") in {f.name for f in (uploaded_files or [])} else ""
+                st.markdown(f"**[{i}]** {badge}{where}")
                 st.code(doc.page_content, language=None, wrap_lines=True)
 
         st.session_state.history.insert(0, {
             "question": question, "answer": answer,
-            "architecture": architecture, "model": gen_label, "time": elapsed,
+            "model": model_label, "time": elapsed,
         })
         st.session_state.history = st.session_state.history[:10]
 
     if st.session_state.history:
         st.markdown("---")
-        st.markdown("### Recent searches")
+        st.markdown("### Recent questions")
         for item in st.session_state.history:
             st.markdown(f"**{item['question']}**")
             st.markdown(item["answer"][:200] + ("…" if len(item["answer"]) > 200 else ""))
-            st.caption(f"{item['architecture']} · {item['model']} · {item['time']:.1f}s")
+            st.caption(f"{item['model']} · {item['time']:.1f}s")
 
 
 if __name__ == "__main__":

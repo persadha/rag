@@ -1,4 +1,4 @@
-# PIRLS RAG — Evaluation & Architecture Evolution (r1 → E9)
+# PIRLS RAG — Evaluation & Architecture Evolution (r1 → E11)
 
 **An R&D analysis for reviewers.** How this benchmark's numbers went from untrustworthy to canonical, what each architecture change actually did *mechanically*, and what to build for production.
 
@@ -13,11 +13,12 @@ This project ran three evaluation passes and a follow-up experiment series:
 - **r1 (RAGAS, Dec 2025 – Jan 2026)** produced *poor and partly meaningless* numbers. The Standard-RAG runs completed but on an immature pipeline; the CRAG runs **never finished** — they died in a four-failure cascade (API quota, local-judge timeouts, a NaN-producing pipeline bug, and unpinned library drift).
 - **r2 (DeepEval, Jan 2026)** fixed the harness (it tolerates a local judge and skips bad rows) but exposed a **measurement artifact**: CRAG's retrieved context was logged as one long blob instead of a chunk list, mechanically zeroing its precision/recall.
 - **r3 (Jun 2026)** is the **first trustworthy three-way comparison**. With the logging fixed, embeddings upgraded, and the retrieval bug closed, **Standard RAG wins or ties on 4 of 5 metrics**. CRAG matches it on answer quality but loses recall; CRAG++ regresses sharply. The added machinery removes signal rather than adding it.
-- **The E-series** found the real levers. **Reranking lifts answer correctness +32% for ~$0**; **hybrid BM25+dense retrieval (E9) adds another +10%**, reaching the program's best score **AC 0.689** on the free local llama; a **stronger generator** also helps (E4, 0.652) but retrieval dominates; an extraction-prompt tweak (E8) and a reranker-model swap (E9b) both **backfired**.
+- **The E-series** found the real levers. **Reranking lifts answer correctness +32% for ~$0**; **hybrid BM25+dense retrieval (E9) adds another +10%** (AC **0.689** on the free local llama); and a **stronger generator on top of hybrid** lifts it further — the generator sweep on hybrid+bge (E10/E11/E12) gives llama 0.689 → deepseek 0.717 → **gpt-5.4-mini 0.774, the program best**. Retrieval still dominates at the open tier (local llama + hybrid 0.689 > gpt-5.4-mini + plain rerank 0.652). An extraction-prompt tweak (E8) and a dense-only reranker swap (E9b) both **backfired** — though under hybrid, bge ≥ MiniLM (E12).
+- **The value-added ablation** answers the reviewers' "is RAG worth it?" decisively: vs a closed-book llama (no retrieval, AC 0.202), retrieval adds **+0.488**; the best config is **+0.572**. (Retrieval-only chunks score 0.827 on AC, but that is a coverage-metric artifact, not better answers — see §8.)
 
-**Recommendation:** ship **Standard + hybrid (BM25+dense+RRF) retrieval + cross-encoder reranking**, generator-agnostic. It is the best-scoring (0.689), simplest, and lowest-latency family. Do **not** ship CRAG/CRAG++ as-is — they cost 4–5× the latency for no quality gain.
+**Recommendation:** ship **Standard + hybrid (BM25+dense+RRF) retrieval + bge-reranker-base**. Default to the **local llama3:8b** generator (private, AC 0.689) and offer **gpt-5.4-mini** for maximum accuracy (AC 0.774). It is the best-scoring, simplest, and lowest-latency family. Do **not** ship CRAG/CRAG++ as-is — they cost 4–5× the latency for no quality gain.
 
-![Metric evolution r1→E9](figures/fig1_metric_evolution.svg)
+![Metric evolution r1→E11](figures/fig1_metric_evolution.svg)
 
 ---
 
@@ -29,7 +30,7 @@ This project ran three evaluation passes and a follow-up experiment series:
 | **Systems** | **Standard** (retrieve→generate), **CRAG** (graded docs + sub-questions over *shared* context), **CRAG++** (CRAG + per-sub-question retrieval + dedup). Definitions: [`context.md`](../context.md) §0. |
 | **Metrics** | Contextual precision, contextual recall, faithfulness, answer correctness, gold-context similarity. All 0–1, higher is better. |
 | **Judge** | r1: OpenAI `gpt-4o-mini`. r2/r3/E: DeepInfra `gpt-oss-120b` (held constant for fair comparison). |
-| **Generation** | r3 baseline + E2/OSS/E8: local Ollama `llama3:8b` (CPU). E4: OpenAI `gpt-5.4-mini` (API). |
+| **Generation** | r3 baseline + E2/OSS/E8/E9/E12: local Ollama `llama3:8b` (CPU). E10: local `deepseek-r1:8b`. E4/E11: OpenAI `gpt-5.4-mini` (API). |
 
 The two retrieval metrics measure *the pipeline*; faithfulness and answer correctness measure *the generation*; gold-context similarity is a judge-free embedding check of whether the gold passage was retrieved at all.
 
@@ -180,9 +181,12 @@ All runs are Standard-family, n=195, judge `gpt-oss-120b`.
 | **E4 gpt-5.4-mini + rerank** | gpt-5.4-mini | k=20→rerank→4 | 0.837 | 0.847 | 0.981 | **0.652** | 1.6 s* |
 | E8 rerank + extract | llama3:8b | rerank, extract prompt | 0.825 | 0.864 | 0.974 | 0.482 | 19.4 s |
 | E9b dense + bge-base | llama3:8b | k=20→bge-reranker-base→4 | 0.807 | 0.850 | 0.957 | 0.578 | ~22 s |
-| **E9c hybrid + bge-base** | llama3:8b | BM25+dense→RRF→bge-base→4 | **0.855** | **0.909** | 0.953 | **0.689** | ~23 s |
+| **E9c hybrid + bge-base** | llama3:8b | BM25+dense→RRF→bge-base→4 | 0.855 | 0.909 | 0.953 | 0.689 | ~23 s |
+| E12 hybrid + MiniLM | llama3:8b | BM25+dense→RRF→MiniLM→4 | 0.867 | 0.920 | 0.950 | 0.679 | 19.2 s |
+| E10 hybrid + bge-base | deepseek-r1:8b | BM25+dense→RRF→bge-base→4 | 0.853 | 0.904 | 0.985 | 0.717 | 62.4 s |
+| **E11 hybrid + bge-base** | gpt-5.4-mini | BM25+dense→RRF→bge-base→4 | 0.865 | 0.914 | **0.984** | **0.774** | 7.9 s* |
 
-\* E4 used the OpenAI API (hosted GPU) — not comparable hardware to the local CPU runs.
+\* E4/E11 used the OpenAI API (hosted GPU) — not comparable hardware to the local CPU runs.
 
 ### 5.1 Reranking — the biggest lever (+32% AC, ~$0)
 
@@ -215,7 +219,7 @@ Combining wide-retrieve-then-rerank with a stronger generator reaches **AC 0.652
 
 Adding a terse "extract the exact fact" prompt on top of reranking **backfired**: AC fell **0.625 → 0.482 (−23%)** even though retrieval metrics stayed high. The brevity instruction confused `llama3:8b` more than it helped. Lesson: prompt tweaks interact strongly with the specific model and must be A/B-tested, never assumed.
 
-### 5.6 E9 (hybrid retrieval + reranker upgrade) — the new best, AC 0.689
+### 5.6 E9 (hybrid retrieval + reranker upgrade) — best open/local, AC 0.689
 
 The report's two untested Tier-1.1 retrieval levers — **hybrid BM25+dense fusion (RRF)** and a **reranker upgrade** — were run as two A/Bs on llama3:8b to attribute each. The result splits cleanly:
 
@@ -226,16 +230,29 @@ The report's two untested Tier-1.1 retrieval levers — **hybrid BM25+dense fusi
 | **E9c** | **BM25+dense → RRF** → bge-base → 4 | **0.855** | **0.909** | **0.689** |
 
 - **Hybrid retrieval is the win: +0.111 AC** (E9c vs E9b). RRF fusion lifts recall to **0.909** — the highest of any run. This is the predicted benefit: lexical BM25 catches exact terms (country names, acronyms like NAPLAN) that the bi-encoder misses, and RRF merges them with dense semantic hits.
-- **The reranker "upgrade" backfired: −0.047 AC.** Swapping MiniLM→bge-base on dense-only (E9b) *underperformed* the 2021 MiniLM (0.625 → 0.578) and dropped precision. bge-**base** is not a better reranker than `ms-marco-MiniLM-L-6-v2` for this task; the E9c gain is from hybrid retrieval, not the reranker. (The heavier `bge-reranker-v2-m3` remains untested.)
-- **E9c (0.689) is the program's best — and it runs on the free local llama**, beating E4's gpt-5.4-mini+rerank (0.652). Direct proof that retrieval, not generator size, is the dominant lever here.
+- **The reranker "upgrade" backfired *on dense-only*: −0.047 AC.** Swapping MiniLM→bge-base on dense-only (E9b) *underperformed* the 2021 MiniLM (0.625 → 0.578) and dropped precision — so on a dense pool, bge-base is not a better reranker than `ms-marco-MiniLM-L-6-v2`. **This reverses under hybrid** (E12, §5.7): the E9c gain is from hybrid retrieval, but bge-base then becomes the better reranker. (The heavier `bge-reranker-v2-m3` remains untested.)
+- **E9c (0.689) is the best *open/local* config — and it runs on the free local llama**, beating E4's gpt-5.4-mini+rerank (0.652). Direct proof that retrieval, not generator size, is the dominant lever here. (A stronger generator on the same hybrid retrieval later set the overall best at 0.774 — E11, §5.7.)
 
-*Caveat (attribution gap):* the 3rd matrix cell — hybrid + MiniLM — was not run, so the hybrid effect is measured on the bge-base reranker. The signal (hybrid lifts recall sharply) is robust regardless.
+### 5.7 E10/E11/E12 — the generator × reranker sweep on hybrid (caveat resolved)
+
+The E9 attribution gap (hybrid measured only on bge-base) is now closed, and the generator is swept on the fixed best retrieval (hybrid + bge-base):
+
+| Run | Generator | Reranker | Ctx P | Ctx R | **AC** | Latency |
+|---|---|---|---|---|---|---|
+| E12 | llama3:8b | **MiniLM** | 0.867 | 0.920 | 0.679 | 19.2 s |
+| E9c | llama3:8b | **bge-base** | 0.855 | 0.909 | 0.689 | ~23 s |
+| E10 | deepseek-r1:8b | bge-base | 0.853 | 0.904 | 0.717 | 62.4 s |
+| **E11** | **gpt-5.4-mini** | bge-base | 0.865 | 0.914 | **0.774** | 7.9 s |
+
+- **Reranker, under hybrid: bge-base ≥ MiniLM** (E9c 0.689 ≥ E12 0.679) — the *opposite* of the dense-only result (§5.6, where MiniLM beat bge-base). BM25 fusion reshapes the candidate pool in a way the bge cross-encoder ranks better. So the earlier "bge-base is not a better reranker" conclusion was dense-only; **under hybrid, bge-base is the right choice** — which is why it is the production default.
+- **Generator is a real, additive second lever once hybrid is in place:** llama 0.689 → deepseek 0.717 → gpt-5.4-mini 0.774. But **latency diverges by 8×**: gpt-5.4-mini is *both* the most accurate and the fastest (7.9 s, API), while deepseek-r1's +0.028 over llama costs 62 s/query (local reasoning model, well past the user survey's 30 s threshold). Hence the production split: **llama3:8b for private/fast, gpt-5.4-mini for maximum accuracy; deepseek is dominated.**
+- **Retrieval still dominates the generator at the open tier:** local llama + hybrid (0.689) beats gpt-5.4-mini + *plain* rerank (E4, 0.652). The closed model only wins once it *also* has hybrid retrieval.
 
 ---
 
 ## 6. Cross-cutting findings
 
-- **Retrieval is the binding constraint, then the generator.** Reranking gave +32%, hybrid fusion another +10% (E9c, the best at 0.689); a stronger generator gave +26%. Retrieval dominates — local llama + hybrid retrieval (0.689) beats gpt-5.4-mini + plain rerank (0.652).
+- **Retrieval is the binding constraint, then the generator.** Reranking gave +32%, hybrid fusion another +10% (E9c, 0.689 on local llama); stacking the strongest generator on top reaches the program best (E11, gpt-5.4-mini + hybrid, **0.774**). Retrieval dominates at the open tier — local llama + hybrid retrieval (0.689) beats gpt-5.4-mini + plain rerank (0.652) — but a strong generator is a real additive lever once hybrid is in place. The value-added ablation confirms the direction: vs closed-book (0.202), retrieval is worth +0.49 to +0.57 (§8).
 - **Grounding is not the problem.** Faithfulness ≈ 0.91–0.98 across every system and run — when given the right context, these models do not hallucinate. This argues *against* "weak sub-10B reasoning" as the primary driver and *against* fine-tuning as the first lever.
 - **Fine-tuning is premature.** The 195-row eval set is a **100% subset of the old 300-row set**, leaving only **~105 clean rows** — too few to fine-tune without leakage, and expected gains are low-single-digit vs reranking's +32% ([`crag_improvement_analysis.md`](crag_improvement_analysis.md) §5e).
 - **Cross-country confusion is real but mild.** Of the 79/195 country-specific questions, 44% have ≥1 wrong-country chunk in the top-4, but only **4%** have a wrong-country chunk at rank 1 — concentrated in positions 2–4, which reranking already cleans up. A hard metadata filter risks the ~60% of questions that name no country (§5d).
@@ -247,7 +264,7 @@ The report's two untested Tier-1.1 retrieval levers — **hybrid BM25+dense fusi
 
 ### 7.1 Recommended pipeline
 
-**Standard RAG + hybrid (BM25+dense+RRF) retrieval + cross-encoder reranking.** This is now the **best-scoring** (AC **0.689**, E9c), **simplest**, and **lowest-latency** family — and it's generator-agnostic and ~$0 (runs on the free local llama, beating gpt-5.4-mini on weaker retrieval). Hybrid + reranking is the core; a stronger generator (E4-class) is an additive second lever for when AC > 0.69 is needed.
+**Standard RAG + hybrid (BM25+dense+RRF) retrieval + bge-reranker-base.** This is the **best-scoring**, **simplest**, and **lowest-latency** family. Default to the **local llama3:8b** generator (private, on-device, AC **0.689**, ~$0); offer **gpt-5.4-mini** for maximum accuracy (AC **0.774**, E11) and lowest latency (7.9 s API). Hybrid + bge reranking is the core; the generator is an additive second lever (open llama → closed gpt-5.4-mini = +0.085 AC). The production UI ([`pirls_rag_ui.py`](../pirls_rag_ui.py)) ships exactly this, with an open/closed model toggle. **deepseek-r1:8b is dominated** — only +0.028 over llama for 3× the latency (62 s).
 
 **Do not ship CRAG or CRAG++ as-is.** They cost 4–5× the latency (§4.6) for no quality gain, because their two distinctive steps each *remove* signal (§4.3, §4.4).
 
@@ -259,9 +276,9 @@ The report's two untested Tier-1.1 retrieval levers — **hybrid BM25+dense fusi
 
 ### 7.3 Retrieval roadmap (highest leverage)
 
-- **Hybrid BM25 + dense with RRF**, then rerank — **DONE (E9c), the new best at 0.689** (+10% over rerank-only, recall 0.909). Ship this.
-- **Reranker model choice matters — and bigger ≠ better:** `bge-reranker-base` *underperformed* the 2021 MiniLM here (E9b). If a reranker upgrade is pursued, test the heavier `bge-reranker-v2-m3` specifically; do not assume any swap helps.
-- **Combine with a stronger generator** (E9c × E4-class) — the untested high-water-mark candidate; hybrid-on-llama already beat gpt-5.4-mini-on-plain-rerank.
+- **Hybrid BM25 + dense with RRF**, then rerank — **DONE (E9c), 0.689 on local llama** (+10% over rerank-only, recall 0.909). Ship this.
+- **Reranker model choice is retrieval-dependent:** on dense-only, `bge-reranker-base` *underperformed* MiniLM (E9b); but **under hybrid, bge-base ≥ MiniLM** (E9c 0.689 ≥ E12 0.679), so bge-base is the production default. The heavier `bge-reranker-v2-m3` remains the only untested reranker upgrade.
+- **Combine with a stronger generator — DONE (E11), the high-water mark at 0.774.** gpt-5.4-mini on hybrid+bge beats every open-model config; deepseek-r1 (E10, 0.717) is dominated on latency. Generator is confirmed as an additive lever on top of hybrid.
 
 ### 7.4 Production engineering
 
@@ -279,6 +296,24 @@ The report's two untested Tier-1.1 retrieval levers — **hybrid BM25+dense fusi
 
 ---
 
+## 8. Value-added ablation & question coverage (reviewer-driven)
+
+Two reviewer asks — R1 "does RAG beat an off-the-shelf LLM?" and R2 "what does the generator add over raw chunks?" — converge on one 3-condition ablation (n=195, AC only, same `gpt-oss-120b` judge). Full point-by-point response: [`reviewer_response_r3.md`](reviewer_response_r3.md).
+
+| Condition | What | AC | human | synthetic |
+|---|---|---|---|---|
+| (a) Closed-book | llama3:8b, **no retrieval** | 0.202 | 0.150 | 0.290 |
+| (b) Retrieval-only | hybrid+bge chunks **as the answer** | 0.827 | 0.852 | 0.785 |
+| (c) Full RAG | llama3:8b + hybrid + bge | 0.689 | 0.753 | 0.581 |
+| (d) Full RAG (best) | gpt-5.4-mini + hybrid + bge | 0.774 | 0.787 | 0.751 |
+
+- **R1 — RAG is decisively worth it.** Same generator, retrieval adds **+0.488** (0.202 → 0.689); the best config is **+0.572** over closed-book. The open 8B model is near-useless closed-book on this corpus — so "GPT-4o scored >80% without retrieval" (a far larger closed model, different corpus) does not generalize here.
+- **R2 — read the artifact carefully.** Retrieval-only (0.827) scoring *above* full RAG is a **GEval coverage artifact**: a ~4,000-char chunk dump contains the gold facts and the metric does not penalize verbosity, while the LLM's concise synthesis is dinged when it compresses a fact. It is **not** evidence that raw chunks are a better answer. The defensible reading: **the system is retrieval-bound, not generation-bound** — once the right chunks are retrieved the facts are present (0.827); the generator's value is concision/usability, which this metric doesn't reward (future work: a usability/concision metric).
+
+**Question coverage (R1-2).** Classifying all 195 questions (`gpt-oss-120b`, [`scripts/classify_questions.py`](../scripts/classify_questions.py)): **68.2% fact-retrieval / 31.8% reasoning** (human 77% fact, synthetic 53% fact). The methodological topics R1 highlighted — sampling (4.6%), plausible values (3.1%), weighting/variance (1.5%) — are **under-sampled (~9%)**, so the eval under-tests reasoning-heavy "why/how" questions; a follow-up set should over-sample them. **KB scale (R2-6):** 6,771 chunks · 108 source docs · 1.5M tokens · 70.9 MB ([`scripts/kb_stats.py`](../scripts/kb_stats.py)).
+
+---
+
 ## Appendix A — Full metric tables
 
 **Across passes (Standard system):**
@@ -291,9 +326,9 @@ The report's two untested Tier-1.1 retrieval levers — **hybrid BM25+dense fusi
 
 (r1/r2 not directly comparable to r3 — different harness, embedding, and the `k` bug. r2 Standard is clean; r2 CRAG is contaminated by the §3.2 artifact.)
 
-**r3 + E-series:** see §4.2, §5, and §5.6 tables. **Best: E9c (hybrid + bge-base, llama3:8b) AC 0.689.**
+**r3 + E-series:** see §4.2, §5, §5.6, and §5.7 tables. **Best overall: E11 (gpt-5.4-mini + hybrid + bge-base) AC 0.774. Best open/local: E9c (llama3:8b + hybrid + bge-base) AC 0.689.**
 
-**Latency (mean s/question):** Standard 19.5 · CRAG 74.1 · CRAG++ 101.8 · +rerank 21.9 · E2 11.3 · deepseek 62.7 · E4 1.6 (API) · E8 19.4 · E9b/E9c ~22–23.
+**Latency (mean s/question):** Standard 19.5 · CRAG 74.1 · CRAG++ 101.8 · +rerank 21.9 · E2 11.3 · deepseek 62.7 · E4 1.6 (API) · E8 19.4 · E9b/E9c/E12 ~19–23 · E10 deepseek+hyb 62.4 · E11 gpt-5.4+hyb 7.9 (API).
 
 ## Appendix B — Sources
 

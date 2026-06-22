@@ -71,19 +71,20 @@ def write(name, body):
 # Figure 1 — metric evolution r1 -> E8
 # ==========================================================================
 def fig1():
-    W, H = 760, 440
+    W, H = 880, 440
     L, Rm, T, B = 60, 150, 50, 90
     plot_w, plot_h = W - L - Rm, H - T - B
     runs = ["r1\n(RAGAS)", "r2\n(DeepEval)", "r3", "r3\n+rerank",
-            "E2\n512", "OSS\ndeepseek", "E4\ngpt-5.4", "E8\nextract", "E9c\nhybrid"]
+            "E2\n512", "OSS\ndeepseek", "E4\ngpt-5.4", "E8\nextract", "E9c\nhybrid",
+            "E12\nhyb+MiniLM", "E10\ndeepseek+hyb", "E11\ngpt5.4+hyb"]
     n = len(runs)
-    # source: verify_numbers.py output + E9 eval CSVs (None = metric absent that pass)
+    # source: verify_numbers.py output + E9–E12 eval CSVs (None = metric absent that pass)
     series = {
-        "precision":               [0.624, 0.618, 0.741, 0.837, 0.723, 0.742, 0.837, 0.825, 0.855],
-        "recall":                  [0.459, 0.539, 0.796, 0.837, 0.759, 0.804, 0.847, 0.864, 0.909],
-        "faithfulness":            [0.598, 0.978, 0.939, 0.940, 0.939, 0.983, 0.981, 0.974, 0.953],
-        "answer_correctness":      [0.412, 0.376, 0.473, 0.625, 0.488, 0.595, 0.652, 0.482, 0.689],
-        "gold_context_similarity": [None,  None,  0.741, 0.755, 0.775, 0.741, 0.755, 0.755, 0.756],
+        "precision":               [0.624, 0.618, 0.741, 0.837, 0.723, 0.742, 0.837, 0.825, 0.855, 0.867, 0.853, 0.865],
+        "recall":                  [0.459, 0.539, 0.796, 0.837, 0.759, 0.804, 0.847, 0.864, 0.909, 0.920, 0.904, 0.914],
+        "faithfulness":            [0.598, 0.978, 0.939, 0.940, 0.939, 0.983, 0.981, 0.974, 0.953, 0.950, 0.985, 0.984],
+        "answer_correctness":      [0.412, 0.376, 0.473, 0.625, 0.488, 0.595, 0.652, 0.482, 0.689, 0.679, 0.717, 0.774],
+        "gold_context_similarity": [None,  None,  0.741, 0.755, 0.775, 0.741, 0.755, 0.755, 0.756, 0.760, 0.756, 0.756],
     }
     labels = {"precision": "Ctx precision", "recall": "Ctx recall",
               "faithfulness": "Faithfulness", "answer_correctness": "Answer correctness",
@@ -92,7 +93,7 @@ def fig1():
     def X(i): return L + (plot_w * i / (n - 1))
     def Y(v): return T + plot_h * (1 - (v - 0.3) / (1.0 - 0.3))
 
-    s = header(W, H, "Figure 1 — Metric evolution, r1 → E9 (Standard-family runs)")
+    s = header(W, H, "Figure 1 — Metric evolution, r1 → E11 (Standard-family runs)")
     # shaded r1 region (RAGAS, not directly comparable)
     s += rect(L - 18, T, (X(0.5) - (L - 18)), plot_h, SHADE)
     s += txt(L - 12, T + plot_h + 64, "RAGAS — not comparable", size=10, fill=MUTED)
@@ -122,8 +123,8 @@ def fig1():
         s += rect(W - Rm + 6, ly - 9, 14, 4, COL[key])
         s += txt(W - Rm + 24, ly - 4, labels[key], size=11)
         ly += 20
-    s += txt(W - Rm + 6, ly + 6, "AC: 0.41→0.69", size=10, fill=MUTED)
-    s += txt(W - Rm + 6, ly + 20, "(best: E9c hybrid)", size=10, fill=MUTED)
+    s += txt(W - Rm + 6, ly + 6, "AC: 0.41→0.77", size=10, fill=MUTED)
+    s += txt(W - Rm + 6, ly + 20, "(best: E11 gpt5.4+hyb)", size=10, fill=MUTED)
     s += txt(20, H - 8, "Faithfulness jump r1→r2 is a framework change (RAGAS→DeepEval), not a real gain.",
              size=10, fill=MUTED)
     write("fig1_metric_evolution.svg", s)

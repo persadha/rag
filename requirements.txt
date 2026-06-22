@@ -10,6 +10,7 @@ requests
 streamlit
 wikipedia
 pypdf
+python-docx
 langchain_chroma
 # Embeddings
 langchain-huggingface
