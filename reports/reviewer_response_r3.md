@@ -1,7 +1,7 @@
 # Response to Reviewers (R1 + R2) — r3 revision
 
 *Information Retrieval Using Retrieval-Augmented Generation on PIRLS Documents*
-Snapshot 2026-06-22 · branch `RAG-2` · 195-question revised dataset · judge `gpt-oss-120b` (held constant).
+Snapshot 2026-06-23 · branch `RAG-3` · 195-question revised dataset · judge `gpt-oss-120b` (held constant).
 
 This document maps every reviewer comment to one of three dispositions and points to the evidence or
 the report edit that addresses it:
@@ -47,6 +47,7 @@ the 195-row set, scored on answer-correctness with the same `gpt-oss-120b` judge
 | Condition | What it is | Answer Corr | human | synthetic |
 |---|---|---|---|---|
 | (a) Closed-book | llama3:8b, **no retrieval** | **0.202** | 0.150 | 0.290 |
+| (a2) Closed-book | gpt-5.4-mini, **no retrieval** | **0.490** | — | — |
 | (b) Retrieval-only | top-4 hybrid+bge chunks **as the answer**, no LLM | **0.827** | 0.852 | 0.785 |
 | (c) Full RAG | llama3:8b + hybrid + bge | 0.689 | 0.753 | 0.581 |
 | (d) Full RAG (best) | gpt-5.4-mini + hybrid + bge | 0.774 | 0.787 | 0.751 |
@@ -58,14 +59,14 @@ deployable open 8B model is close to unusable without retrieval. This is the dir
 justification the reviewer asked for: the investment in RAG is warranted.
 
 ### R1-6 — On the NAEP "GPT-4o >80% without retrieval" point ✅✏️
-Our closed-book number (0.202) is **specific to an open ~8B model on the PIRLS corpus** and should be
-read that way. Two reasons it does not contradict the NAEP finding: (i) GPT-4o is a far larger *closed*
-model — our own *closed* model (gpt-5.4-mini) is much stronger than llama3:8b; (ii) the corpora and
-question styles differ. The honest claim is therefore narrow and defensible: **for the locally-deployable
-open model that this project targets, retrieval is essential, not optional.** We also added the
-open-vs-closed comparison the reviewer suggested (R1-6, "test open models"): open llama3:8b (0.689) vs.
-closed gpt-5.4-mini (0.774) under identical retrieval — the closed model helps, but retrieval is the
-larger lever (local llama + hybrid 0.689 > gpt-5.4-mini + plain rerank 0.652).
+We now have a **direct empirical answer** to this comparison: gpt-5.4-mini **without retrieval scores 0.490** on the same 195-question PIRLS set — well below the llama3:8b **with** retrieval (0.689). This completes the 2×2:
+
+|  | Closed-book | RAG (hybrid + bge) |
+|--|-------------|-------------------|
+| llama3:8b (open) | 0.202 | **0.689** |
+| gpt-5.4-mini (closed) | 0.490 | **0.774** |
+
+Two takeaways: (i) **RAG-llama (0.689) > closed-book-mini (0.490)** — the small open model with retrieval beats the larger closed model without it on this corpus; (ii) the closed-book 0.490 remains well below the NAEP >80% figure, consistent with our original reading: GPT-4o is a far larger model than gpt-5.4-mini, and the corpora and question styles differ. The honest claim remains narrow and defensible: **for the locally-deployable open model this project targets, retrieval is essential**. The 2×2 now provides the "test open models" evidence the reviewer requested.
 
 ### R2-2 — Value added by *generation*: read the caveat carefully ✅⚠️
 Taken at face value, the table says raw chunks (0.827) **beat** full RAG (0.689 / 0.774) on

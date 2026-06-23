@@ -1,6 +1,6 @@
 # RAG experiments — master index & findings (r3 program)
 
-Single entry point for reviewing this work. Snapshot: 2026-06-22 (E10–E12 generator/reranker sweep on hybrid + value-added ablation + question classification added). Branch `RAG-2`.
+Single entry point for reviewing this work. Snapshot: 2026-06-23 (E13 CRAG++fixed+mini + closed-book gpt-5.4-mini added; 2×2 value-added table complete). Branch `RAG-3`.
 PIRLS RAG benchmark, 195-question revised dataset (`datasets/revision/evaluation_dataset.xlsx`),
 local generation, DeepInfra `gpt-oss-120b` judge (held constant across ALL runs for fair comparison),
 5 metrics: contextual precision/recall, faithfulness, answer correctness, gold-context similarity.
@@ -57,8 +57,9 @@ injects off-topic chunks (precision 0.45). Shared ceiling: llama3:8b fails ~21% 
 | E12: hybrid + MiniLM rerank | llama3:8b | BM25+dense→RRF→MiniLM→4 | 0.867 | 0.920 | 0.950 | 0.679 | 0.760 |
 | E10: hybrid + bge-base | deepseek-r1:8b | BM25+dense→RRF→bge-base→4 | 0.853 | 0.904 | 0.985 | 0.717 | 0.756 |
 | **E11: hybrid + bge-base** | gpt-5.4-mini | BM25+dense→RRF→bge-base→4 | 0.865 | 0.914 | **0.984** | **0.774** | 0.756 |
+| **E13: CRAG++fixed + hybrid + bge** | gpt-5.4-mini | CRAG++ w/ 4 fixes (T2.3–T2.5, T3.7) | 0.855 | 0.897 | — | **0.780** | — |
 
-**Best system: E11 (gpt-5.4-mini + hybrid + bge-base) at AC=0.774.** Best open/local: **E9c (llama3:8b + hybrid + bge-base) AC=0.689**. Key findings:
+**Best overall: E13 (CRAG++fixed + gpt-5.4-mini + hybrid + bge) at AC=0.780** (+0.006 over E11). Best Standard config: **E11 AC=0.774**. Best open/local: **E9c (llama3:8b + hybrid + bge-base) AC=0.689**. Note: E13's +0.006 margin over E11 is marginal — Standard (E11) remains the recommended production config for its simplicity. Key findings:
 - **Reranking is the single biggest lever** (+32% AC over baseline) and free (~$0, CPU cross-encoder).
 - **Hybrid retrieval (E9) is the next lever: +0.111 AC** (E9c 0.689 vs E9b 0.578). BM25+dense+RRF lifts recall to 0.909+ — lexical matching catches exact terms (country names, acronyms) dense embeddings miss.
 - **Generator is a strong second lever once hybrid is in place (E10/E11).** On identical hybrid+bge retrieval: llama3:8b **0.689** < deepseek-r1:8b **0.717** < gpt-5.4-mini **0.774**. But latency diverges sharply: gpt-5.4-mini 7.9 s (API) vs deepseek 62.4 s (local reasoning) — deepseek's +0.028 over llama costs ~3× the latency.
@@ -81,9 +82,12 @@ Deprioritized: metadata-by-country (mild confusion, subsumed by rerank), multi-q
 | Condition | AC | human | synthetic |
 |---|---|---|---|
 | Closed-book (llama3:8b, no retrieval) | 0.202 | 0.150 | 0.290 |
+| **Closed-book (gpt-5.4-mini, no retrieval)** | **0.490** | — | — |
 | Retrieval-only (hybrid+bge chunks as answer) | 0.827 | 0.852 | 0.785 |
 | Full RAG (llama3:8b + hybrid + bge) | 0.689 | 0.753 | 0.581 |
 | Full RAG (gpt-5.4-mini + hybrid + bge) | 0.774 | 0.787 | 0.751 |
+
+**2×2 (model × retrieval):** open-llama closed-book 0.202 → +RAG 0.689 (+0.487); closed-mini closed-book 0.490 → +RAG 0.774 (+0.284). **RAG-llama (0.689) > closed-book-mini (0.490)** — the small open model with retrieval beats the large closed model without it.
 
 - **R1: retrieval is decisive** — +0.488 (llama, vs closed-book), +0.572 at the ceiling. ⚠️ **R2 caveat:** retrieval-only (0.827) > full RAG is a **GEval coverage artifact** (a 4k-char chunk dump contains the gold facts and isn't penalized for verbosity), NOT evidence chunks beat synthesis. The real takeaway: **retrieval-bound, not generation-bound.** Full write-up: [`reviewer_response_r3.md`](reviewer_response_r3.md). Scripts: [`scripts/run_generation.py --no-retrieval`](../scripts/run_generation.py), [`scripts/make_retrieval_only.py`](../scripts/make_retrieval_only.py), [`scripts/build_value_added_table.py`](../scripts/build_value_added_table.py).
 
@@ -103,8 +107,10 @@ Deprioritized: metadata-by-country (mild confusion, subsumed by rerank), multi-q
 | E9c | Standard, hybrid BM25+dense+RRF + bge-base | ✅ done — AC 0.689 (best open/local; hybrid +0.111) |
 | E12 | Standard, hybrid + MiniLM (isolate reranker under hybrid) | ✅ done — AC 0.679 (bge ≥ MiniLM under hybrid) |
 | E10 | Standard, hybrid + bge, deepseek-r1:8b | ✅ done — AC 0.717 (slow, 62 s) |
-| E11 | Standard, hybrid + bge, gpt-5.4-mini | ✅ done — **AC 0.774, best overall** |
-| Value-added ablation | closed-book + retrieval-only baselines | ✅ done |
+| E11 | Standard, hybrid + bge, gpt-5.4-mini | ✅ done — AC 0.774 (best Standard config) |
+| Value-added ablation | closed-book + retrieval-only baselines (llama) | ✅ done |
+| Closed-book gpt-5.4-mini | gpt-5.4-mini, no retrieval | ✅ done — **AC 0.490** (2×2 complete; RAG-llama 0.689 > closed-mini 0.490) |
+| E13: CRAG++fixed + mini | CRAG++ w/ 4 fixes, gpt-5.4-mini, hybrid + bge | ✅ done — **AC 0.780, program best** (marginal +0.006 over E11) |
 | Question classification | 195 questions by level/domain | ✅ done |
 | OSS: gemma-3-4b | Standard, gemma-3-4b (DeepInfra) | ❌ not run — deprioritized |
 Available on demand: hybrid + bge-reranker-v2-m3 (heavier reranker); E7 embedder swap; CRAG/CRAG++ + hybrid.
