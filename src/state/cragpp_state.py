@@ -17,3 +17,6 @@ class CRAGppState(TypedDict, total=False):
     final_answer: str
     generation_grade: Literal["yes", "no", "not_useful"]
     attempts: int
+    # Rerank-aware fixes (active only when a cross-encoder is available):
+    is_single_hop: bool              # True -> skip decomposition, answer directly (adaptive, T2.5)
+    reranked_docs: List[Document]    # graded docs reranked vs the ORIGINAL question (top-k)
