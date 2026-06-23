@@ -16,6 +16,7 @@ in .env. Best results to date: gpt-5.4-mini AC 0.774, llama3:8b 0.689 (n=195).
 """
 
 import hashlib
+import html as _html
 import os
 import sys
 import time
@@ -26,6 +27,8 @@ import streamlit as st
 
 sys.path.append(str(Path(__file__).parent))
 load_dotenv()  # API keys for the closed (cloud) models
+
+ROOT = Path(__file__).resolve().parent
 
 from src.config.config import Config
 from src.config.config_api import APIConfig
@@ -49,7 +52,7 @@ CLOSED_MODELS = {
     "Claude Haiku  (Anthropic)": "haiku",
 }
 
-st.set_page_config(page_title="PIRLS RAG Assistant", page_icon="📚", layout="centered")
+st.set_page_config(page_title="IEA • PIRLS Document Search", page_icon="📘", layout="wide")
 
 
 # --- Local model discovery --------------------------------------------------
@@ -174,10 +177,113 @@ def build_graph(retriever, gen_kind: str, gen_value: str):
 
 
 def main():
-    st.title("📚 PIRLS Document Assistant")
-    st.markdown("Ask a question about the PIRLS 2021 corpus — or attach your own documents.")
+    st.markdown("""
+<style>
+.block-container { padding-top: 80px; padding-bottom: 4.5rem; }
+
+#header-sticky {
+  position: sticky;
+  top: 0;
+  z-index: 1000;
+  background: #ffffff;
+  margin: -12px 0 10px 0;
+  padding: 10px 24px 8px 24px;
+  border-bottom: 1px solid #e5e7eb;
+  box-shadow: 0 4px 10px rgba(0,0,0,0.02);
+}
+
+.topbar { display: flex; align-items: center; gap: 14px; padding: .4rem .25rem; margin: 0; }
+.topbar h3 { margin: 0; font-size: 1.4rem; font-weight: 700; letter-spacing: .2px; color: #111827; }
+
+.pulse-dot {
+  display: inline-block; width: 10px; height: 10px; border-radius: 50%;
+  background: #22c55e; box-shadow: 0 0 0 rgba(34,197,94,.7);
+  animation: pulse 1.5s infinite; margin-right: 6px;
+}
+@keyframes pulse {
+  0%   { box-shadow: 0 0 0 0   rgba(34,197,94,.7); }
+  70%  { box-shadow: 0 0 0 10px rgba(34,197,94,0);  }
+  100% { box-shadow: 0 0 0 0   rgba(34,197,94,0);   }
+}
+
+.footer {
+  position: fixed; left: 0; right: 0; bottom: 0; height: 40px;
+  background: #fafafa; border-top: 1px solid #e5e7eb;
+  display: flex; align-items: center; justify-content: center;
+  font-size: .85rem; color: #6b7280; z-index: 9999;
+}
+
+[data-testid="stSidebar"] { min-width: 300px !important; }
+
+.source-chunk {
+  background: #f8fafc;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  padding: .65rem .9rem;
+  margin-bottom: .5rem;
+  font-size: .85rem;
+  line-height: 1.55;
+  color: #374151;
+}
+.source-chunk .sc-meta { font-weight: 600; font-size: .8rem; color: #6b7280; margin-bottom: .35rem; }
+.source-chunk .sc-text { white-space: pre-wrap; word-break: break-word; }
+
+.history-card {
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: .75rem 1rem;
+  margin-bottom: .5rem;
+}
+.history-card .hq { font-weight: 600; font-size: .95rem; color: #111827; margin-bottom: .3rem; }
+.history-card .ha { font-size: .88rem; color: #374151; line-height: 1.5; margin-bottom: .25rem; }
+.history-card .hm { font-size: .78rem; color: #9ca3af; }
+
+.answer-card {
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-left: 4px solid #2563eb;
+  border-radius: 8px;
+  padding: 1rem 1.25rem;
+  margin: .5rem 0 .75rem 0;
+  font-size: 1rem;
+  line-height: 1.6;
+  color: #111827;
+}
+
+[data-testid="stFormSubmitButton"] button {
+  background-color: #2563eb !important;
+  color: white !important;
+  border: none !important;
+  font-weight: 600 !important;
+  border-radius: 8px !important;
+  transition: background-color 0.25s ease-in-out;
+}
+[data-testid="stFormSubmitButton"] button:hover {
+  background-color: #1d4ed8 !important;
+}
+</style>
+""", unsafe_allow_html=True)
+
+    st.markdown(
+        '<div id="header-sticky">'
+        '<div class="topbar"><h3>IEA • PIRLS Document Search</h3></div>'
+        '</div>',
+        unsafe_allow_html=True,
+    )
 
     with st.sidebar:
+        _logo = ROOT / "img" / "logo.png"
+        if _logo.exists():
+            st.image(str(_logo), use_container_width=True)
+        else:
+            st.markdown(
+                '<div style="text-align:center;margin:2px 0 10px;">'
+                '<img src="https://www.iea.nl/sites/default/files/2020-05/IEA_Hamburg_logo_rgb.png" width="160"/>'
+                '</div>',
+                unsafe_allow_html=True,
+            )
+        st.divider()
         st.subheader("Model")
         is_open = st.radio(
             "Model type",
@@ -276,8 +382,10 @@ def main():
         answer = strip_reasoning(result.get("answer", "")) or "(no answer produced)"
         used_docs = result.get("retrieved_docs", [])
 
-        st.markdown("### Answer")
-        st.success(answer)
+        st.markdown(
+            f'<div class="answer-card">{_html.escape(answer).replace(chr(10), "<br>")}</div>',
+            unsafe_allow_html=True,
+        )
         tags = [model_label.split("  ")[0],
                 "hybrid+rerank" if use_hybrid else "dense",
                 f"{elapsed:.1f}s", f"{len(used_docs)} sources"]
@@ -287,13 +395,21 @@ def main():
 
         # Source attribution (transparency: every answer shows the chunks it used).
         with st.expander(f"Sources used ({len(used_docs)} chunks)", expanded=True):
+            uploaded_names = {f.name for f in (uploaded_files or [])}
+            chunks_html = ""
             for i, doc in enumerate(used_docs, start=1):
                 source = Path(doc.metadata.get("source", "?")).name
                 page = doc.metadata.get("page")
-                where = f"{source}" + (f", p.{page}" if page is not None else "")
-                badge = "📎 " if doc.metadata.get("source") in {f.name for f in (uploaded_files or [])} else ""
-                st.markdown(f"**[{i}]** {badge}{where}")
-                st.code(doc.page_content, language=None, wrap_lines=True)
+                badge = "📎 " if doc.metadata.get("source") in uploaded_names else ""
+                where = _html.escape(f"{badge}[{i}] {source}" + (f", p.{page}" if page is not None else ""))
+                text = _html.escape(doc.page_content)
+                chunks_html += (
+                    f'<div class="source-chunk">'
+                    f'<div class="sc-meta">{where}</div>'
+                    f'<div class="sc-text">{text}</div>'
+                    f'</div>'
+                )
+            st.markdown(chunks_html, unsafe_allow_html=True)
 
         st.session_state.history.insert(0, {
             "question": question, "answer": answer,
@@ -304,10 +420,24 @@ def main():
     if st.session_state.history:
         st.markdown("---")
         st.markdown("### Recent questions")
+        cards_html = ""
         for item in st.session_state.history:
-            st.markdown(f"**{item['question']}**")
-            st.markdown(item["answer"][:200] + ("…" if len(item["answer"]) > 200 else ""))
-            st.caption(f"{item['model']} · {item['time']:.1f}s")
+            q = _html.escape(item["question"])
+            a = _html.escape(item["answer"][:200]) + ("…" if len(item["answer"]) > 200 else "")
+            m = _html.escape(f"{item['model'].split('  ')[0]} · {item['time']:.1f}s")
+            cards_html += (
+                f'<div class="history-card">'
+                f'<div class="hq">{q}</div>'
+                f'<div class="ha">{a}</div>'
+                f'<div class="hm">{m}</div>'
+                f'</div>'
+            )
+        st.markdown(cards_html, unsafe_allow_html=True)
+
+    st.markdown(
+        '<div class="footer">© IEA Hamburg · PIRLS Document Search</div>',
+        unsafe_allow_html=True,
+    )
 
 
 if __name__ == "__main__":
