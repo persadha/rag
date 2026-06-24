@@ -40,6 +40,9 @@ env/
 # ── Tool caches ───────────────────────────────────────────────────
 .deepeval/
 
+# ── Node (figure rasterizer deps) ─────────────────────────────────
+node_modules/
+
 # ── OS / editor ───────────────────────────────────────────────────
 .DS_Store
 Thumbs.db
