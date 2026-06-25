@@ -21,6 +21,16 @@
 - **CRAG++** — `graph_builder_cragpp.py` / `cragpp_nodes.py` / `cragpp_state.py` (4th
   architecture, new). CRAG's skeleton + per-sub-question retrieval, chunk dedup, no word cap.
   All future improvements land here, never in CRAG.
+- **CRAG++ (rerank-aware) / "cragfix"** — CRAG++ with the four T2.3/T2.4/T2.5/T3.7 fixes:
+  reranker-score grader (replaces gemma3:1b binary grader), union-rerank against the original
+  question, adaptive decomposition, and synthesize-from-reranked-context. Run on E9c hybrid+bge.
+  Results files: `results/*_cragpp_*_hybrid_cragfix_*`.
+
+**Report-facing names (R&D committee report, decided 2026-06-23).** The committee report uses
+simple labels, not the code names: **Basic RAG** = Standard; **Advanced RAG (v1)** = CRAG (the
+evaluated advanced system); **Advanced RAG v2** = CRAG++; **Advanced RAG v3** = CRAG++ (rerank-aware
+/ cragfix). Mechanisms are still attributed by version (v1 grader → recall loss; v2 per-sub-q
+retrieval → precision loss; v3 fixes both).
 
 ---
 

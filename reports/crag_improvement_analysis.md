@@ -3,6 +3,13 @@
 > Evidence base: r3 run (2026-06-20), 195-question revised dataset, local llama3:8b generation,
 > gemma3:1b grader, DeepInfra `gpt-oss-120b` judge. Per-row data in `results/eval_r3_*_deepeval.csv`
 > + `results/gen_r3_*_ollama.csv`. Headline table in `context.md` §2.0.
+>
+> **This is the diagnostic + roadmap document (written before the E-series).** For the *outcomes* of the
+> roadmap below — the full E1–E12 results, the value-added ablation, and the final recommendation
+> (best overall: gpt-5.4-mini + hybrid + bge = AC 0.774; best open/local: llama3:8b + hybrid + bge = 0.689)
+> — see the canonical [`experiments_index.md`](experiments_index.md) and
+> [`architecture_evolution_analysis.md`](architecture_evolution_analysis.md). §4 below carries an inline
+> **Status (2026-06)** callout marking what was done.
 
 ## 1. The result
 
@@ -60,10 +67,32 @@ Even with good context (precision ≥ 0.7), the generator still produces a wrong
 
 ## 4. Improvement roadmap (ordered by impact ÷ effort)
 
-Two libraries are **already in `requirements`** — `flashrank` (CPU cross-encoder reranker) and `rank_bm25` — so the top levers need no new heavy deps.
+Two libraries are **already in `requirements`** — `rank_bm25` (BM25) and a CPU cross-encoder reranker — so the top levers need no new heavy deps.
+
+> **Status (2026-06) — what was actually done.** Reranking was implemented with sentence-transformers
+> `CrossEncoder` (`ms-marco-MiniLM-L-6-v2` default; [`src/vectorstore/rerank.py`](../src/vectorstore/rerank.py)),
+> **not** `flashrank`. Roadmap outcomes:
+>
+> | # | Step | Status | Result |
+> |---|---|---|---|
+> | T1.1 | Cross-encoder reranking | ✅ done | AC 0.473→**0.625** (+32%) |
+> | T1.2 | Hybrid BM25+dense+RRF → rerank | ✅ done | E9c, AC **0.689** (recall 0.909) |
+> | T2.3 | Reranker-score grader (CRAG) | ❌ not done | CRAG **abandoned**, not fixed (ship Standard) |
+> | T2.4 | CRAG++ union-rerank vs original q | ❌ not done | CRAG++ abandoned |
+> | T2.5 | Adaptive decomposition | ❌ not done | CRAG++ abandoned |
+> | T3.6 | Stronger generator | ✅ done | deepseek 0.595/0.717; gpt-5.4-mini 0.652/**0.774** (best) |
+> | T3.7 | CRAG++ synthesize from reranked ctx | ❌ not done | CRAG++ abandoned |
+> | T4.8 | Smaller chunks / sentence-window | ⚠️ partial | E2 512/64 done (+3%); sentence-window not |
+> | T4.9 | Metadata filtering by country | ❌ not done | deprioritized by §5d analysis |
+>
+> The 5 not-done items are the **CRAG/CRAG++ fixes (T2.3–2.5, T3.7)** and metadata (T4.9): the program chose
+> to **ship Standard and drop CRAG/CRAG++** (architecture_evolution_analysis §7.2) rather than repair them.
+> Also un-run: E1 (k_final 4/6/8 sweep), E5 (grader ablation), E6 (bge-reranker-v2-m3 / mxbai), E7 (embedder
+> swap). The reranker swap that *was* tested — bge-reranker-base (E9b/E9c/E12) — under-performed MiniLM on
+> dense-only but **matches/beats it under hybrid**, so bge-base is the production default.
 
 ### Tier 1 — Retrieval (biggest lever; helps ALL three systems)
-1. **Cross-encoder reranking.** Retrieve top-20 dense → rerank with `flashrank` → keep top-4. Wire once in `src/vectorstore/vectorstore.py::get_retriever` (or wrap the retriever) so every graph inherits it. Expected: precision + recall up across the board; directly attacks the 40–107 "retrieval-failure" rows.
+1. **Cross-encoder reranking.** Retrieve top-20 dense → rerank with a sentence-transformers `CrossEncoder` → keep top-4. Wrap the retriever so every graph inherits it. Expected: precision + recall up across the board; directly attacks the 40–107 "retrieval-failure" rows. *(Done — implemented as [`src/vectorstore/rerank.py`](../src/vectorstore/rerank.py).)*
 2. **Hybrid BM25 + dense with RRF**, then rerank (Tier-1.1). Build a BM25 index over the same chunks, reciprocal-rank-fuse with dense, feed the fused top-20 into the reranker. Targets entity questions where dense alone misses.
 
 ### Tier 2 — Fix the CRAG-specific defects

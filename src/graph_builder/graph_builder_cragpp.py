@@ -19,7 +19,11 @@ class GraphBuilder:
         self.retriever = retriever
         self.llm = llm
         self.slm = slm
-        self.nodes = CRAGppNodes(llm, slm, retriever)  # prompts set in build()
+        # Reuse the retriever's already-loaded cross-encoder (RerankRetriever._ce) for the
+        # rerank-aware fixes. None when the retriever doesn't rerank (dense/hybrid-only) —
+        # the nodes then fall back to the legacy CRAG++ behaviour.
+        cross_encoder = getattr(retriever, "_ce", None)
+        self.nodes = CRAGppNodes(llm, slm, retriever, cross_encoder=cross_encoder)  # prompts set in build()
         self.graph = None
 
     def set_prompts(self, retrieval_grader_prompt, generation_grader_prompt, question_rewriter_prompt):
@@ -71,28 +75,36 @@ class GraphBuilder:
 
         workflow.add_node("retrieve", self.retrieve)
         workflow.add_node("grade_documents", self.nodes.grade_documents)
+        workflow.add_node("answer_direct", self.nodes.answer_direct)
         workflow.add_node("plan_sub_steps", self.nodes.plan_sub_steps)
         workflow.add_node("generate_answers", self.nodes.generate_answers)
         workflow.add_node("grade_generation", self.nodes.grade_generation)
 
         workflow.set_entry_point("retrieve")
         workflow.add_edge("retrieve", "grade_documents")
+        # 3-way (T2.5 adaptive): no docs -> END; single-hop -> direct answer; else decompose.
         workflow.add_conditional_edges(
             "grade_documents",
-            lambda state: "plan_sub_steps" if state["documents"] else "end",
-            {"plan_sub_steps": "plan_sub_steps", "end": END}
+            lambda state: ("end" if not state.get("documents")
+                           else "answer_direct" if state.get("is_single_hop", False)
+                           else "plan"),
+            {"end": END, "answer_direct": "answer_direct", "plan": "plan_sub_steps"}
         )
+        workflow.add_edge("answer_direct", "grade_generation")
         workflow.add_edge("plan_sub_steps", "generate_answers")
         workflow.add_edge("generate_answers", "grade_generation")
 
-        # Stop when the answer is useful OR the attempt cap is reached (loop guard)
+        # Stop when useful OR attempt cap reached; otherwise retry on the SAME path the
+        # answer came from (single-hop -> answer_direct, multi-hop -> generate_answers),
+        # so a single-hop retry never loops into empty generate_answers.
         workflow.add_conditional_edges(
             "grade_generation",
-            lambda state: "stop" if (
+            lambda state: ("stop" if (
                 state.get("generation_grade") == "yes"
                 or state.get("attempts", 0) >= MAX_GENERATION_ATTEMPTS
-            ) else "retry",
-            {"stop": END, "retry": "generate_answers"}
+            ) else "retry_direct" if state.get("is_single_hop", False)
+                else "retry_multi"),
+            {"stop": END, "retry_direct": "answer_direct", "retry_multi": "generate_answers"}
         )
 
         self.graph = workflow.compile()

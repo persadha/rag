@@ -22,13 +22,20 @@ DEFAULT_RERANK_MODEL = "cross-encoder/ms-marco-MiniLM-L-6-v2"
 
 class RerankRetriever:
     def __init__(self, base_retriever, top_k: int = 4,
-                 model_name: str = DEFAULT_RERANK_MODEL):
+                 model_name: str = DEFAULT_RERANK_MODEL, cross_encoder=None):
         """base_retriever should fetch a WIDE candidate set (e.g. k=20); this
-        wrapper reranks those down to top_k (e.g. 4)."""
-        from sentence_transformers import CrossEncoder
+        wrapper reranks those down to top_k (e.g. 4).
+
+        Pass a preloaded `cross_encoder` (a sentence_transformers CrossEncoder) to
+        reuse a cached model instead of loading `model_name` again — used by the UI,
+        which builds retrievers per request but caches the heavy model once."""
         self.base = base_retriever
         self.top_k = top_k
-        self._ce = CrossEncoder(model_name)
+        if cross_encoder is not None:
+            self._ce = cross_encoder
+        else:
+            from sentence_transformers import CrossEncoder
+            self._ce = CrossEncoder(model_name)
 
     def invoke(self, query: str, config=None, **kwargs) -> List[Document]:
         docs = self.base.invoke(query)

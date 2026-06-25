@@ -1,0 +1,138 @@
+1. Abstract
+2. Introduction
+2.1. Problem Statement
+2.2. Scope
+2.3. Significance
+2.4. Contributions
+2.5. Related Works
+3. Methodology
+3.1. Data Preparation
+3.2. User Survey
+3.2.1. Survey Summary
+3.2.2. Participant Profile
+3.2.3. Functional Requirements
+3.2.4. Non-Functional Requirements
+3.2.5. Qualitative Insight and Future Steps
+3.3 System Architecture
+3.3.1 Basic Architecture (Standard RAG)
+3.3.2 Advance Architecture (Corrective RAG)
+4. Experimental Setup
+4.1. Hardware Limits
+4.2. Models Used
+4.3 Metrics
+4.3.1 Context Precision
+4.3.2 Context Recall
+4.3.3 Faithfulness
+4.3.4 Answer Correctness
+4.4 Evaluation Dataset Contruction
+4.4.1 Human-Generated Datapoints
+4.4.2. Synthetic Datapoints
+4.4.3 [NEW] Human vs synthtetic datapoints type
+[To Do] Incorporate this findings from `reviewr_response_r3.md`: 
+R1-2 — Question scope & cognitive level ✅✏️. We classified all 195 questions by cognitive level, subtype, and domain with the held-constant gpt-oss-120b (scripts/classify_questions.py). The reviewer's intuition is confirmed and now quantified: the set is dominated by fact-retrieval, and the deep methodological "why/how" questions they name are thin.
+
+Cognitive level	Overall	Human (n=123)	Synthetic (n=72)
+fact_retrieval	68.2% (133)	77.2%	52.8%
+reasoning (why/how/analysis)	31.8% (62)	22.8%	47.2%
+Subtype	share		Domain (top)	share
+factual_lookup	60.0%		assessment_framework	25.1%
+explanatory_why	17.4%		other	24.1%
+procedural_how	9.2%		context_questionnaires	16.9%
+definitional	7.7%		reading_achievement_results	8.7%
+comparative_analytical	5.6%		methodology (sampling+weighting+plausible-values)	~9.2%
+Three honest takeaways for the report: (i) ~68% of the set is fact-retrieval; reasoning-oriented questions are a real but minority ~32%. (ii) The specific methodological topics the reviewer cites — sampling (4.6%), plausible values & scaling (3.1%), weighting & variance (1.5%) — are under-represented (~9% combined), so the evaluation under-tests exactly the "why implement X / how to use Y" reasoning the reviewer highlights. (iii) Human-authored questions skew even more to facts (77%) than synthetic ones (53%). We will add this distribution to the methods section and explicitly acknowledge in the limitations that reasoning-heavy methodological questions are under-sampled — and recommend deliberately over-sampling them in any follow-up eval set.
+
+Please also describe how we came up with this numbers (how we tested it)
+
+5. Results and Discussion
+5.1 Comparative Performance Metrics
+5.1.1 Evaluation Constraints and Data Subsetting
+5.2 Findings
+5.2.1 [NEW] Baseline Metrics 
+5.2.2 [NEW] Closed Book (No Retrieval) 
+5.2.3 [NEW] Retrieval Only
+5.2.1 Context Precision and Recall
+5.2.1.1 Context Precision by system and model 
+5.2.1.2 Context Recall by system and model 
+5.2.2 Faithfulness
+5.2.3 Answer Correctness
+5.2.4 Response Time
+5.3 User Interface Implementation
+5.4 Challenges in Tabular Data Extraction
+5.5 Analysis for the Decent Context Scores
+5.6 Analysis for the Low Answer Correctness Scores
+5.7 Analysis for the Low Overall CRAG Scores Compared to the Standard
+6. [NEW] Improvements
+6.1 [NEW] Findings
+Bottom line. Simple standard RAG with deepseek-r1 (or gemma3) is the best-performing configuration today; the advanced CRAG-style pipeline underperforms it everywhere that matters — consistent with the bugs in §4.3. The biggest lever is retrieval quality (chunking, the k-ignored bug in §5, the all-mpnet-base-v2 embedding upgrade in §2.2, reranking). This is not evidence that decomposition is unnecessary — ~35% of the questions are multi-hop (§2.2), where a correctly-implemented decomposition should help; CRAG simply implements it wrong (decompose-but-reuse, no re-retrieval).
+
+[To Do] Summarize this (from Section 4 in `context.md`-->
+Why CRAG scored ~2× worse than basic RAG — artifact vs genuine (investigated 2026-06-12). The "basic ≫ advanced" result (§2) is part scoring artifact, part real:
+
+Artifact — inflates the precision/recall gap (an eval-harness issue, not the architecture):
+🔴 Context logged as one blob, not a list. Standard logs retrieved_context as 4 separate nodes (~3.6k chars); CRAG logs 1 node (~8.3–8.9k chars). Contextual precision/recall are ranking metrics over a list of nodes — a single blob degenerates them to 0. CRAG hard-zeros on 135/197 rows (69%) vs standard's 36%; round-2's blank-line splitter only reached ~1.35 chunks, so the artifact survived (l2 precision still 0.29).
+Proven false zeros: rows whose blob contains 73–100% of the gold-answer words still scored precision 0.
+Logical clincher: CRAG runs the same retriever on the same query as standard (then reuses those docs), so its context is a superset of standard's — scoring the same text 2× worse is serialization, not worse retrieval.
+
+Genuine — real CRAG weakness, concentrated in answer correctness:
+🟠 gemma3:1b grader over-filters. Zero-precision rows average only 19% gold-answer-word overlap (vs 56% on non-zero rows) → the answer-bearing doc was often graded out before generation.
+🟠 Decompose-against-reused-context → refusal soup. Sub-questions are narrower than the broad reused docs cover, so per-sub-answers are frequently refusals ("Unfortunately, I don't see any information…"); synthesis blends them into a vague final answer. (page_content_1 == page_content_2 in 198/199 rows confirms reuse.)
+🟠 "≤100 words" synthesis (advrag_nodes.py:127) paraphrases away the exact fact ("218", "March") the terse gold answers need.
+Not broken: faithfulness is high (0.59 → 0.97 round-2) — CRAG answers are grounded, just grounded-and-vague.
+Takeaway: the answer-correctness gap is genuine; the precision/recall gap is largely a harness artifact. For a fair comparison, re-log CRAG's retrieved context as a list of distinct chunks (ideally the pre-grading docs) and re-score — see §6 (P1 eval-harness fix).
+
+[To Do] Add other relevant findings from `architecture_evolution_analysis.md` 
+
+Cross-cutting issues
+🔴 Config env-var collision. config.py:8-13 — LLAMA3_MODEL, GEMMA3_MODEL, GPT_OSS_MODEL, DEEPSEEK_MODEL all read the same LLM_MODEL env var (only fallbacks differ); setting LLM_MODEL collapses them all to one value. Fix: distinct env keys per model, or drop the env indirection.
+🟠 get_retriever(k) ignores k. vectorstore.py:61 — as_retriever(k=k) should be as_retriever(search_kwargs={"k": k}). Likely source of duplicate retrieved contexts (eval notebooks compensate with dedupe=True). Fix: use search_kwargs.
+🟠 Benchmark fairness. Systems emit different answer shapes (standard "I'll walk you through…", advanced "Based on the provided documents…"). Scoring measures verbosity as much as architecture. Fix: uniform "extract concise answer" normalization pass before scoring.
+
+6.2 [NEW] Improved Architecture
+6.2.1 [NEW] Analysis
+[To Do] Describe what were changed in r2 to get to r3. Explain also that a new advanced architecture (CRAG++) was designed was a result of this improve. The new CRAG++ = CRAG + per-sub-question retrieval + dedup.
+[To Do] Summarize r3 findings, but only the Standard and CRAG++. Compare the r3 findings against r2.
+[To Do] Explain why  Standard RAG beat CRAG++ (from `crag_improvement_analysis.md, section 2)
+[To Do] Incorporate the analysis in `architecture_evolution_analysis.md` Section 4.1 to 4.5 if they are relevant
+6.2.2 [NEW] Improvement
+[To Do] SOTA techniques used to Improves -> Take from Section 3 `crag_improvement_analysis.md`
+[To Do] Since Standard RAG always excelled CRAG++ we will first focus on improving the Standard RAG:
+[To Do] List improvements, narration flow:
+        Standard (baseline) w/ llama3:8b -> **+ rerank** w/ llama3:8b -> E2 chunk-512 w/ llama3:8b -> 
+        E8 rerank + extract w/ llama3:8b -> E9b dense + bge-base w/ llama3:8b -> **E9c hybrid + bge-base** w/ llama3:8b 
+        -> E12 hybrid + MiniLM
+
+        From the experiment we found out that the best config is **E9c hybrid + bge-base** w/ llama3:8b. We used this config 
+        for further test:
+
+        **E9c hybrid + bge-base** w/ llama3:8b -> **E9c hybrid + bge-base** w/ deepseek-r1:8b -> 
+        **E9c hybrid + bge-base** w/ gpt-5.4-mini
+
+[To Do] Report the findings based of the improved Standard on the configs listed above
+[To Do] Do the analysis based on the sources in the `report`
+
+[To Do] After focusing on the Standard now we are going to focus on the improvement of the CRAG++ + T2.4, T3.7, T2.3, T2.5 on **E9c hybrid + bge-base**:
+[To Do] Explain why these four fixes were chosen and why would it improve CRAG++
+[To Do] narration flow 
+[To Do] Report the findings based of the improved CRAG++
+[To Do] Do the analysis based on the sources in the `report`
+
+6.2.3 [NEW] Conclusion from the Improved Architectures
+
+7 Recommendations and Future Work
+
+8. Final Conclusion from the whole project.
+9. References
+
+[To Do][Important] Verify if all reviewers comments have been incorporated in the latest experiments/improved architecture. 
+Please write a section about this, explain how the feedback were implemented by comparing r2 and the final r3. If there feedbacks
+tha have NOT been implemented explain why and put this into future work recommendations.
+
+      
+
+
+
+
+
+ 
+
