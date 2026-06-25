@@ -59,7 +59,7 @@ def header(w, h, title):
     return (f'<svg xmlns="http://www.w3.org/2000/svg" width="{w}" height="{h}" '
             f'viewBox="0 0 {w} {h}" {FONT}>\n'
             f'<rect width="{w}" height="{h}" fill="white"/>\n'
-            f'{txt(20, 28, title, size=16, weight="600")}\n')
+            f'{txt(w / 2, 28, title, size=16, anchor="middle", weight="600")}\n')
 
 
 def write(name, body):
