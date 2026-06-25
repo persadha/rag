@@ -24,3 +24,6 @@ sentence-transformers
 # Hosted generators / graders (haiku, llama-groq, gemma-deepinfra, openai-mini)
 langchain-openai
 langchain-anthropic
+# Report build (reports/build_docx.py): LaTeX -> MathML for native Word equations.
+# MathML -> OMML uses reports/MML2OMML.XSL (vendored); lxml ships with python-docx.
+latex2mathml

@@ -74,9 +74,9 @@ def fig1():
     W, H = 880, 440
     L, Rm, T, B = 60, 150, 50, 90
     plot_w, plot_h = W - L - Rm, H - T - B
-    runs = ["r1\n(RAGAS)", "r2\n(DeepEval)", "r3", "r3\n+rerank",
-            "E2\n512", "OSS\ndeepseek", "E4\ngpt-5.4", "E8\nextract", "E9c\nhybrid",
-            "E12\nhyb+MiniLM", "E10\ndeepseek+hyb", "E11\ngpt5.4+hyb"]
+    runs = ["RAGAS\npass 1", "DeepEval\npass 2", "Basic\npass 3", "Basic\n+rerank",
+            "Basic\nchunk 512", "Basic\ndeepseek", "rerank\ngpt-5.4", "rerank\nextract", "hybrid\nbge",
+            "hybrid\nMiniLM", "hybrid\ndeepseek", "hybrid\ngpt-5.4"]
     n = len(runs)
     # source: verify_numbers.py output + E9–E12 eval CSVs (None = metric absent that pass)
     series = {
@@ -93,7 +93,7 @@ def fig1():
     def X(i): return L + (plot_w * i / (n - 1))
     def Y(v): return T + plot_h * (1 - (v - 0.3) / (1.0 - 0.3))
 
-    s = header(W, H, "Figure 1 — Metric evolution, r1 → E11 (Standard-family runs)")
+    s = header(W, H, "Metric evolution across passes and experiments (Basic-family runs)")
     # shaded r1 region (RAGAS, not directly comparable)
     s += rect(L - 18, T, (X(0.5) - (L - 18)), plot_h, SHADE)
     s += txt(L - 12, T + plot_h + 64, "RAGAS — not comparable", size=10, fill=MUTED)
@@ -105,7 +105,7 @@ def fig1():
     # divider before r3 ("canonical comparison begins")
     xdiv = (X(1) + X(2)) / 2
     s += line(xdiv, T, xdiv, T + plot_h, stroke=MUTED, w=1, dash="4,4")
-    s += txt(xdiv + 4, T + 12, "canonical →", size=10, fill=MUTED)
+    s += txt(xdiv + 4, T + 12, "trustworthy →", size=10, fill=MUTED)
     # x labels
     for i, r in enumerate(runs):
         for j, ln in enumerate(r.split("\n")):
@@ -124,8 +124,8 @@ def fig1():
         s += txt(W - Rm + 24, ly - 4, labels[key], size=11)
         ly += 20
     s += txt(W - Rm + 6, ly + 6, "AC: 0.41→0.77", size=10, fill=MUTED)
-    s += txt(W - Rm + 6, ly + 20, "(best: E11 gpt5.4+hyb)", size=10, fill=MUTED)
-    s += txt(20, H - 8, "Faithfulness jump r1→r2 is a framework change (RAGAS→DeepEval), not a real gain.",
+    s += txt(W - Rm + 6, ly + 20, "(best: hybrid + gpt-5.4)", size=10, fill=MUTED)
+    s += txt(20, H - 8, "Faithfulness jump from pass 1 to pass 2 is a framework change (RAGAS→DeepEval), not a real gain.",
              size=10, fill=MUTED)
     write("fig1_metric_evolution.svg", s)
 
@@ -192,7 +192,7 @@ def fig3():
     vmax = 110
     n = len(data)
     bw = plot_w / n * 0.62
-    s = header(W, H, "Figure 3 — Mean latency per question (seconds)")
+    s = header(W, H, "Mean latency per question (seconds)")
 
     def Y(v): return T + plot_h * (1 - v / vmax)
     for g in [0, 25, 50, 75, 100]:
@@ -225,7 +225,7 @@ def fig4():
     recall = [0.796, 0.819, 0.486]
     precision = [0.741, 0.771, 0.590]
     n = len(cats)
-    s = header(W, H, "Figure 4 — Advanced v1's gemma3:1b grader is net-negative when it fires")
+    s = header(W, H, "Advanced v1's gemma3:1b grader is net-negative when it fires")
 
     def Y(v): return T + plot_h * (1 - v / 1.0)
     for g in [0, 0.2, 0.4, 0.6, 0.8, 1.0]:
@@ -259,7 +259,7 @@ def fig5():
     baseline = [0.127, 0.185]
     rerank = [0.531, 0.333]
     n = len(groups)
-    s = header(W, H, "Figure 5 — Reranking on the 40 worst-retrieval rows (baseline P<0.5)")
+    s = header(W, H, "Reranking on the 40 worst-retrieval rows (baseline P<0.5)")
 
     def Y(v): return T + plot_h * (1 - v / 0.6)
     for g in [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6]:
@@ -299,7 +299,7 @@ def fig6():
         "Answer correctness": [0.473, 0.474, 0.334],
     }
     n = len(groups)
-    s = header(W, H, "Figure 6 — r3 canonical comparison (llama3:8b, n=195)")
+    s = header(W, H, "Basic vs Advanced comparison (llama3:8b, n=195)")
 
     def Y(v): return T + plot_h * (1 - v / 1.0)
     for g in [0, 0.2, 0.4, 0.6, 0.8, 1.0]:
@@ -339,7 +339,7 @@ def fig7():
             ("Full RAG\n(best, gpt-5.4-mini)", 0.774, API, False)]
     n = len(bars)
     bw = plot_w / n * 0.5
-    s = header(W, H, "Figure 7 — Is RAG worth it? Answer correctness by condition (n=195)")
+    s = header(W, H, "Answer correctness by condition (n=195)")
 
     def Y(v): return T + plot_h * (1 - v / 1.0)
     for g in [0, 0.2, 0.4, 0.6, 0.8, 1.0]:
@@ -378,7 +378,7 @@ def fig8():
     COLF, COLR = COL["precision"], COL["recall"]
     vmax = 65
     n = len(rows)
-    s = header(W, H, "Figure 8 — Eval-set question types (n=195): 68% fact / 32% reasoning")
+    s = header(W, H, "Eval-set question types (n=195): 68% fact / 32% reasoning")
     bh = plot_h / n * 0.62
 
     def X(v): return L + plot_w * v / vmax
@@ -473,7 +473,7 @@ def fig_adv_v1():
     for h in hts:
         ys.append(y); y += h + gap
     H = y + 30
-    s = header(W, H, "Figure — Advanced v1 (CRAG), as built")
+    s = header(W, H, "Advanced v1 (CRAG), as built")
     for i in range(len(steps) - 1):
         s += _vdown(cx, ys[i] + hts[i], ys[i + 1])
     for (title, sub), yy, hh in zip(steps, ys, hts):
@@ -506,7 +506,7 @@ def fig_adv_v2():
     for h in hts:
         ys.append(y); y += h + gap
     H = y + 30
-    s = header(W, H, "Figure — Advanced v2 (CRAG++), as built")
+    s = header(W, H, "Advanced v2 (CRAG++), as built")
     for i in range(len(steps) - 1):
         s += _vdown(cx, ys[i] + hts[i], ys[i + 1])
     for (title, sub, hot), yy, hh in zip(steps, ys, hts):
@@ -522,7 +522,7 @@ def fig_adv_v2():
 def fig_adv_v3():
     W, H = 760, 760
     cx = 360
-    s = header(W, H, "Figure — Advanced v3 (rerank-aware), as built")
+    s = header(W, H, "Advanced v3 (rerank-aware), as built")
     # --- shared top column (centered) ---
     cw = 320; cbx = cx - cw / 2
     s += _fbox(cbx, 50, cw, 32, "Query")
@@ -571,7 +571,36 @@ def fig_adv_v3():
     write("fig_adv_v3.svg", s)
 
 
+def fig_recommended():
+    """The recommended production config: Basic + hybrid retrieval + reranking."""
+    W, H = 620, 552
+    cx = 310
+    s = header(W, H, "Recommended configuration: Basic RAG with hybrid retrieval + reranking")
+    s += _fbox(210, 50, 200, 32, "Query")
+    # fan out to the two retrievers
+    s += _arrow(cx, 82, 200, 120)
+    s += _arrow(cx, 82, 420, 120)
+    s += _fbox(110, 120, 180, 46, "BM25 retrieval", "sparse · exact terms")
+    s += _fbox(330, 120, 180, 46, "Dense retrieval", "all-mpnet embeddings")
+    # merge into reciprocal rank fusion
+    s += _arrow(200, 166, 290, 216)
+    s += _arrow(420, 166, 330, 216)
+    s += _fbox(150, 216, 320, 46, "Fuse → top 20", "reciprocal rank fusion (RRF)",
+               fill=NEWFILL, border=NEWBORDER)
+    s += _vdown(cx, 262, 300)
+    s += _fbox(150, 300, 320, 46, "Cross-encoder rerank → top 4",
+               "bge cross-encoder, runs on CPU", fill=NEWFILL, border=NEWBORDER)
+    s += _vdown(cx, 346, 384)
+    s += _fbox(150, 384, 320, 46, "Generate answer", "llama3:8b — local & private")
+    s += _vdown(cx, 430, 468)
+    s += _fbox(150, 468, 320, 46, "Answer + source chunks", "with provenance metadata")
+    s += txt(20, H - 12, "Single-pass (Basic) pipeline with hybrid retrieval and reranking — the "
+             "recommended local, private configuration. Blue = the two retrieval levers.",
+             size=10, fill=MUTED)
+    write("fig_recommended.svg", s)
+
+
 if __name__ == "__main__":
     fig1(); fig2(); fig3(); fig4(); fig5(); fig6(); fig7(); fig8()
-    fig_adv_v1(); fig_adv_v2(); fig_adv_v3()
+    fig_adv_v1(); fig_adv_v2(); fig_adv_v3(); fig_recommended()
     print("done")

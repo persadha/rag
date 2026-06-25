@@ -6,6 +6,8 @@ SVG figures are embedded from their rasterised PNGs in reports/figures/png/.
 """
 import re
 from pathlib import Path
+import latex2mathml.converter as _l2m
+from lxml import etree as _etree
 from docx import Document
 from docx.shared import Pt, Inches, RGBColor
 from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_BREAK
@@ -14,15 +16,37 @@ from docx.oxml.ns import qn
 from docx.oxml import OxmlElement
 
 ROOT = Path(__file__).parent
-MD = ROOT / "revised_final_report.md"
-OUT = ROOT / "revised_final_report.docx"
+MD = ROOT / "revised_final_report_ver_2.md"
+OUT = ROOT / "revised_final_report_ver_2.docx"
 HEADCLR = RGBColor(0x0F, 0x47, 0x61)
 CONTENT_DXA = 9360  # 6.5" at 1" margins on US Letter
+
+# ---- LaTeX -> native Word equation (OMML) ----
+# Pipeline: LaTeX --latex2mathml--> MathML --MML2OMML.XSL--> OMML (<m:oMath>).
+# MML2OMML.XSL ships with Microsoft Office; we search a repo-local copy first
+# so the build is portable if that file is vendored alongside this script.
+_XSL_CANDIDATES = [
+    ROOT / "MML2OMML.XSL",
+    Path(r"C:\Program Files\Microsoft Office\root\Office16\MML2OMML.XSL"),
+    Path(r"C:\Program Files (x86)\Microsoft Office\root\Office16\MML2OMML.XSL"),
+]
+_xsl_path = next((p for p in _XSL_CANDIDATES if p.exists()), None)
+if _xsl_path is None:
+    raise SystemExit(
+        "MML2OMML.XSL not found. Install MS Office or vendor the file as "
+        "reports/MML2OMML.XSL to render LaTeX equations.")
+_MML2OMML = _etree.XSLT(_etree.parse(str(_xsl_path)))
+
+def latex_to_omath(latex):
+    """LaTeX string -> a fresh <m:oMath> lxml element ready to append to a <w:p>."""
+    mathml = _l2m.convert(latex)
+    dom = _etree.fromstring(mathml.encode("utf-8"))
+    return _MML2OMML(dom).getroot()
 
 # ---- image width (inches) by filename keyword ----
 def img_width(path):
     n = path.lower()
-    if any(k in n for k in ("fig_adv_v1", "fig_adv_v2", "fig_adv_v3")):
+    if any(k in n for k in ("fig_adv_v1", "fig_adv_v2", "fig_adv_v3", "fig_recommended")):
         return 4.8
     if "orig_fig1_basic" in n or "orig_fig2_advanced" in n:
         return 5.4
@@ -38,7 +62,8 @@ def map_image(path):
     return path
 
 # ---- inline formatting ----
-TOKEN = re.compile(r'\*\*(.+?)\*\*|`([^`]+)`|\[([^\]]+)\]\(([^)]+)\)|\*(.+?)\*')
+# groups: 1=math $..$  2=bold  3=code  4=link-text  5=link-url  6=italic
+TOKEN = re.compile(r'\$([^$]+)\$|\*\*(.+?)\*\*|`([^`]+)`|\[([^\]]+)\]\(([^)]+)\)|\*(.+?)\*')
 
 def add_runs(par, text, base_italic=False, size=None):
     pos = 0
@@ -48,15 +73,17 @@ def add_runs(par, text, base_italic=False, size=None):
     for m in TOKEN.finditer(text):
         if m.start() > pos:
             style(par.add_run(text[pos:m.start()]))
-        if m.group(1) is not None:
-            r = par.add_run(m.group(1)); r.bold = True; style(r)
-        elif m.group(2) is not None:
-            r = par.add_run(m.group(2)); r.font.name = "Consolas"
+        if m.group(1) is not None:                     # inline math -> OMML
+            par._p.append(latex_to_omath(m.group(1)))
+        elif m.group(2) is not None:                   # bold
+            r = par.add_run(m.group(2)); r.bold = True; style(r)
+        elif m.group(3) is not None:                   # code
+            r = par.add_run(m.group(3)); r.font.name = "Consolas"
             r.font.size = Pt((size or 11) - 1)
-        elif m.group(3) is not None:
-            r = par.add_run(m.group(3)); style(r)
-        elif m.group(5) is not None:
-            r = par.add_run(m.group(5)); r.italic = True; style(r)
+        elif m.group(4) is not None:                   # link text
+            r = par.add_run(m.group(4)); style(r)
+        elif m.group(6) is not None:                   # italic
+            r = par.add_run(m.group(6)); r.italic = True; style(r)
         pos = m.end()
     if pos < len(text):
         style(par.add_run(text[pos:]))
@@ -81,6 +108,28 @@ def add_page_number_footer(section):
     sz = OxmlElement('w:sz'); sz.set(qn('w:val'), '18'); rpr.append(sz)
     run.append(rpr); fld.append(run)
     p._p.append(fld)
+
+def add_toc_page(doc):
+    """A 'Contents' heading + an auto-updating Word TOC field, then a page break.
+    The TOC builds itself from the Heading 1-3 styles; Word fills in page numbers
+    on open / when fields are updated (right-click -> Update Field)."""
+    h = doc.add_paragraph()
+    hr = h.add_run("Contents")
+    hr.bold = True; hr.font.name = "Times New Roman"
+    hr.font.size = Pt(18); hr.font.color.rgb = HEADCLR
+    h.paragraph_format.space_after = Pt(8)
+    p = doc.add_paragraph(); r = p.add_run()._r
+    begin = OxmlElement('w:fldChar'); begin.set(qn('w:fldCharType'), 'begin')
+    instr = OxmlElement('w:instrText'); instr.set(qn('xml:space'), 'preserve')
+    instr.text = 'TOC \\o "1-3" \\h \\z \\u'
+    sep = OxmlElement('w:fldChar'); sep.set(qn('w:fldCharType'), 'separate')
+    placeholder = OxmlElement('w:t'); placeholder.set(qn('xml:space'), 'preserve')
+    placeholder.text = "Right-click and choose Update Field to build the table of contents."
+    sep.append(placeholder)
+    end = OxmlElement('w:fldChar'); end.set(qn('w:fldCharType'), 'end')
+    for el in (begin, instr, sep, end):
+        r.append(el)
+    doc.add_paragraph().add_run().add_break(WD_BREAK.PAGE)
 
 # ---- document setup ----
 doc = Document()
@@ -123,7 +172,16 @@ while i < len(lines):
     if re.match(r'^-{3,}$', s):
         if not title_block_done:
             doc.add_paragraph().add_run().add_break(WD_BREAK.PAGE)
+            add_toc_page(doc)
             title_block_done = True
+        i += 1; continue
+
+    # display equation: $$ ... $$ on its own line -> centred native equation
+    if s.startswith("$$") and s.endswith("$$") and len(s) > 4:
+        p = doc.add_paragraph(); p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        p.paragraph_format.space_before = Pt(4)
+        p.paragraph_format.space_after = Pt(6)
+        p._p.append(latex_to_omath(s[2:-2].strip()))
         i += 1; continue
 
     # table block

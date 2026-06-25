@@ -49,3 +49,8 @@ Thumbs.db
 .vscode/
 .idea/
 *.code-workspace
+~$*
+
+# ── Reports: generated artifacts ──────────────────────────────────
+# Large generated workbook — rebuild with reports/build_appendix_d.py
+reports/revised_final_report_appendix_D.xlsx
