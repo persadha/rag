@@ -322,7 +322,7 @@ Because the two evaluations differ in measurement methodology — a repaired ret
 
 ## 6. Results and Discussion
 
-### 6.1 Comparative Performance
+### 6.1 Architecture Comparison
 
 The controlled comparison holds the dataset, judge, embeddings, retrieval, and generator (llama3:8b) constant, and varies only the architecture.
 
@@ -354,7 +354,7 @@ On response time, the single-pass Basic pipeline is far faster. The Advanced pip
 
 *Figure 8. Mean latency per question, in seconds, measured on the re-evaluation laptop (Intel Arc Pro 140T). These are not comparable to the original report's RTX-4090 timings, and the API runs marked with an asterisk use hosted GPUs that are not comparable to the local runs either.*
 
-### 6.3 The Value of Retrieval: A Value-Added Ablation
+### 6.3 The Value of Retrieval: An Ablation Study
 
 Two questions about whether the system justifies its complexity merit direct examination. First, does RAG outperform a general-purpose LLM used without retrieval? Second, what does the generator add over simply returning the retrieved chunks? A single ablation answers both, scoring answer correctness across five conditions on the same 195 questions with the same judge.
 
@@ -376,7 +376,7 @@ Retrieval helps both the open and the closed generator. Holding the generator fi
 
 The generation result needs a careful reading. At face value the retrieval-only condition scores 0.827, above full RAG, which would suggest the generator has negative value. It does not. The number is a scoring artifact (Figure 9): the retrieval-only "answer" is a roughly 4,000-character dump of the top chunks, and the answer-correctness metric rewards how many reference facts are present without penalizing length. A long dump that contains the gold facts scores well, while the generator's short synthesis loses points whenever it leaves out a fact to stay concise. A 4,000-character dump is not a usable answer, so the two conditions are not comparable. This fits the rest of the report: the system is limited by retrieval, not by generation. Once the right chunks are retrieved the facts are there, and the generator turns them into a short, attributable answer. Experts who already know the documentation may do fine with the raw chunks; non-experts need the synthesis. Measuring what the generator adds would require a concision or usability metric, not fact coverage alone (§8.3).
 
-### 6.4 Why Answer Correctness Is Bounded, and Why the Advanced Pipelines Underperformed
+### 6.4 Locating the Performance Bottlenecks
 
 It is important to identify which stage of the advanced pipeline fails — decomposition, retrieval, reranking, or synthesis — rather than relying on competing explanations. The data localizes each loss to a specific, measured mechanism, and the conclusion is that the problem lies in retrieval and orchestration rather than in the small model's reasoning, since faithfulness is high everywhere.
 
@@ -392,11 +392,11 @@ The third factor is a shared generation ceiling. Even with good context, where p
 
 Part of the precision and recall gap reported in the original report was also the logging artifact corrected in this revision and explained in §7.1. The practical implication is to invest in retrieval and orchestration, which §7.2 pursues and where the largest gains are found.
 
-### 6.5 Challenges in Tabular Data Extraction
+### 6.5 Tabular Data Extraction
 
 The system could not reliably extract information from tables with nested layouts or graphical elements. Standard PDF text extraction flattens table structure and loses the row-and-column relationships, so a figure that is obvious to a human reader becomes an unstructured sequence of numbers to the retriever. Treating tables as images for a vision-language model such as LLaVA (H. Liu et al., 2023) also performed poorly: fragments parsed, but headers and categories were misassociated, and a text embedding model is not built for spatial layout in any case. Given the engineering effort a proper fix would require, we deferred high-fidelity table extraction; §8.3 lists the specialized parsers we would evaluate next.
 
-### 6.6 Deployable Prototype (User Interface)
+### 6.6 The Deployed User Interface
 
 ![Figure 11. Production UI overview.](figures/orig/orig_fig9_ui.png)
 
