@@ -197,15 +197,11 @@ superseded dataset.)
 ## Future work / acknowledged limitations
 
 **R1-5 & R2-3 — Human/expert evaluation & judge calibration 🔭.** We keep this as future work (no expert
-grading infrastructure was built in scope) and strengthen the limitations section. Two mitigations to
-note: (i) r3's best answer-correctness (0.774; precision 0.865) is now **well above the ≤0.5 band** that
+grading infrastructure was built in scope) and strengthen the limitations section. One mitigation to
+note: r3's best answer-correctness (0.774; precision 0.865) is now **well above the ≤0.5 band** that
 prompted R2's "would an expert accept this?" concern, so the acceptability question is less acute than at
-report time; (ii) we ran a small **dual-judge cross-check** (`scripts/rejudge_disputed.py`,
-`gpt-oss-120b` vs. a stronger second judge `gpt-5.5`) on the recommended config's 56 disputed
-low-correctness rows: the stronger judge lifted 21% (12/56) from <0.5 to ≥0.5 (mean AC 0.286 → 0.429,
-only 2/56 lowered), indicating a portion of low scores are judge under-credit rather than wrong answers
-(output: `results/rejudge_disputed_hybrid_bge.csv`). A calibrated expert study on a representative
-subset remains the right next step and is recommended.
+report time. A calibrated expert study on a representative subset remains the right next step and is
+recommended.
 
 **R2-1 — Validate on internal/non-public documents 🔭.** Valid and important: the privacy premise is best
 substantiated on the very material it protects. We acknowledge this as the primary external-validity

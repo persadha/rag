@@ -434,8 +434,6 @@ This report relies on the third pass, which logs every system's context as a chu
 
 *Figure 13. Metric evolution across the evaluation passes and experiments for the Basic-family runs. The shaded RAGAS region is not comparable; the trustworthy comparison begins at the final pass.*
 
-As a lightweight calibration of the judge itself, we re-scored the recommended configuration's disputed low-correctness rows (answer correctness ≤ 0.6 but context precision ≥ 0.5) with a stronger second judge, gpt-5.5. It raised 21% of them (12 of 56) above the 0.5 mark and lowered only 4% (2 of 56), which indicates that a portion of low scores reflect the primary judge under-crediting a correct answer rather than the answer being wrong. A full calibration against human experts remains future work (§8.3).
-
 ### 7.2 Improvement Levers
 
 A retrieval-only diagnostic demonstrates why retrieval is the most important lever. The gold-bearing chunk is in the top 4 only 63% of the time, but it is in the top 20 fully 87% of the time. The remedy is to retrieve broadly and then rerank, promoting the gold chunk into the few that the generator receives.
@@ -518,7 +516,7 @@ The prototype ran on a single laptop, which determines the latency figures in th
 
 These findings point to several next steps.
 
-The most important is human-expert evaluation. Subject-matter experts should grade a representative subset, both to calibrate the LLM judge and to test whether a given score is good enough for professional use. Two observations lessen the concern in the meantime: the best configuration scores 0.774 on answer correctness and 0.865 on precision, both well clear of the 0.5 adequacy mark, and the dual-judge cross-check in §7.1 indicates that some low scores reflect judge under-credit rather than wrong answers, so true quality may be slightly higher than measured. A formal expert study remains the right next step.
+The most important is human-expert evaluation. Subject-matter experts should grade a representative subset, both to calibrate the LLM judge and to test whether a given score is good enough for professional use. One observation lessens the concern in the meantime: the best configuration scores 0.774 on answer correctness and 0.865 on precision, both well clear of the 0.5 adequacy mark. A formal expert study remains the right next step.
 
 The evaluation set also needs more reasoning-heavy questions. It is currently about 68% fact-retrieval and under-samples methodological "why and how" questions (§4.4.1). A follow-up evaluation set should include more questions on sampling design, weighting, and plausible values.
 
@@ -532,7 +530,7 @@ Three engineering directions would also help:
 
 ### 8.4 Limitations
 
-The results are bounded in several ways that should be stated explicitly. The corpus is a single-domain, public one (PIRLS). PDF-to-text preprocessing introduces artifacts. The LLM judge is not yet calibrated against human experts. The question set is weighted toward fact-retrieval. We did not run formal significance tests, so small differences in answer correctness (a few hundredths of a point) should be read as within run-to-run variation rather than as real gaps. And the latency is hardware-specific: the re-evaluation ran on a different, less capable laptop (the Intel Arc Pro 140T with 32 GB) than the original RTX-4090 prototype, so response times are not comparable across the two reports and are used only for relative comparison within the re-evaluation runs. These bound how far the results generalize, and they motivate the future work above.
+The results are bounded in several ways. Three bound how far they generalize and directly motivate the future work above (§8.3): the corpus is single-domain and public (PIRLS), the LLM judge is not yet calibrated against human experts, and the question set is weighted toward fact-retrieval. Three further caveats concern the measurements themselves. PDF-to-text preprocessing introduces artifacts, most visibly in tables (§6.5). We did not run formal significance tests, so small differences in answer correctness (a few hundredths of a point) should be read as run-to-run variation rather than real gaps. And latency is hardware-specific: the re-evaluation ran on a less capable laptop (Intel Arc Pro 140T, 32 GB) than the original RTX-4090 prototype, so response times are not comparable across the two reports and are used only for relative comparison within the re-evaluation runs.
 
 ---
 
