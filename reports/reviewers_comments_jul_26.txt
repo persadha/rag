@@ -1,0 +1,12 @@
+
+
+Skimming the revisions relative to the draft report ("original" in your terms), it appears that many sections and text passages are re-written rather than revised. I attempted a document comparison (attached). It largely failed and is probably non-informative because Word wasn't able to link headings and text components with enough reliability. 
+
+I see the need to make some adjustments given that we will only post the final report publicly, not the original one. There are 28 references to the "original report" and there is also chapter 5 and appendix A that make explicit reference. The published report should be free of these references, including on the cover page, and there would also be no need to document, say,  "measurement artifacts" in the published report because these things were effectively ironed out and readers will only be interested in the final state. 
+
+Then I have some smaller comments.
+* Style: there is a single level 3 heading 4.4.1, which has no sibblings 
+* Terminology: there is no formal "R&D Committee" (contrary to the Steering, Publications or Standing Committee). This can simple  say "IEA R&D Fund Call 4-5".
+* Conclusions:
+* Would you recommend that IEA develops a public-facing interface such as "Ask NAEP" (https://air.org/project/developing-ai-assistants-improve-access-education-information, https://dergipark.org.tr/en/pub/epod/article/1548128)? I know that this is not the primary purpose but a legitimate interest to allow for a more robust and accurate discovery of our data. 
+* Internally: what is the value added of a local RAG system in comparison to a service like Claude that can also ingest documents and organizational knowledge in a safe environment?
