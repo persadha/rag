@@ -151,6 +151,10 @@ sec.page_width, sec.page_height = Inches(8.5), Inches(11)
 sec.top_margin = sec.bottom_margin = sec.left_margin = sec.right_margin = Inches(1)
 add_page_number_footer(sec)
 
+# tell Word to refresh fields (the TOC) when the document is opened
+_upd = OxmlElement('w:updateFields'); _upd.set(qn('w:val'), 'true')
+doc.settings.element.append(_upd)
+
 # ---- parse markdown ----
 lines = MD.read_text(encoding="utf-8").split("\n")
 i = 0
@@ -273,7 +277,7 @@ while i < len(lines):
         i += 1; continue
 
     # title-block meta lines (centered) before title block ends
-    if not title_block_done and (s.startswith("**Prepared") or s.startswith("**Revised")):
+    if not title_block_done and (s.startswith("**Prepared") or s.startswith("**Revised") or s.startswith("**Date")):
         p = doc.add_paragraph(); p.alignment = WD_ALIGN_PARAGRAPH.CENTER
         add_runs(p, s)
         i += 1; continue
@@ -284,6 +288,6 @@ while i < len(lines):
     i += 1
 
 doc.core_properties.title = "Information Retrieval Using RAG on PIRLS Documents"
-doc.core_properties.author = "Widianto Persadha, Heiko Sibberns, Mohammad S. Thariq, Bettina Wietzorek"
+doc.core_properties.author = "Widianto Persadha, Heiko Sibberns, Mohammad S. Tariq, Bettina Wietzorek"
 doc.save(str(OUT))
 print("wrote", OUT)

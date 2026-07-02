@@ -1,10 +1,10 @@
 # Information Retrieval Using Retrieval-Augmented Generation on PIRLS Documents
 
-### A Comparative Evaluation of Retrieval and Architecture Choices for Privacy-Preserving, Locally-Hosted Question Answering
+### A comparative evaluation of baseline and agentic pipelines using open-weight LLMs and DeepEval metrics
 
-**Prepared by:** Widianto Persadha, Heiko Sibberns, Mohammad S. Thariq, Bettina Wietzorek
-**Prepared for:** IEA — R&D Committee
-**Revised:** June 2026 *(a revision of the original 2026 final report)*
+**Prepared by:** Widianto Persadha, Heiko Sibberns, Mohammad S. Tariq, Bettina Wietzorek
+**Prepared for:** IEA R&D Fund Call 4-5
+**Date:** June 2026
 
 ---
 
@@ -23,9 +23,9 @@ The principal finding is that retrieval quality, not pipeline complexity, determ
 
 Retrieval is clearly justified. A central question for any such system is whether it outperforms a general-purpose model used without retrieval. Holding the generator fixed, retrieval increases answer correctness from 0.202 with no retrieval to 0.689, a gain of +0.49; the best configuration reaches 0.774. On this corpus the open 8B model is nearly unusable without retrieval, and even the strongest closed model tested gains substantially once retrieval is added.
 
-The hypothesis that a more advanced pipeline performs better did not hold on local hardware. A more complex pipeline that decomposes the query, grades retrieved documents, and re-retrieves per sub-question did not improve answer quality over the simple pipeline, and it incurred four to five times the latency. Part of the large gap reported in the original report was a measurement artifact in how retrieved context was logged (§7.1); once corrected, the two pipelines were comparable in quality. A purpose-built redesign (Advanced v3) reached parity with the simple pipeline but did not surpass it.
+The hypothesis that a more advanced pipeline performs better did not hold on local hardware. A more complex pipeline that decomposes the query, grades retrieved documents, and re-retrieves per sub-question did not improve answer quality over the simple pipeline, and it incurred four to five times the latency. The two pipelines were comparable in quality, and a purpose-built redesign (Advanced v3) reached parity with the simple pipeline but did not surpass it.
 
-We recommend deploying Basic RAG with hybrid retrieval and reranking, using the local open llama3:8b generator as the private default. That configuration is private, costs essentially nothing to run, scores 0.689 on answer correctness, and returns an answer in roughly 20 seconds. The closed gpt-5.4-mini model can be offered as an optional higher-accuracy tier for non-sensitive queries only. We do not recommend deploying the agentic pipeline in its current form. Appendix A summarizes the changes relative to the original report; the items needing resources beyond this phase, chiefly a calibrated human-expert evaluation and validation on non-public documents, are carried forward as prioritized future work.
+We recommend deploying Basic RAG with hybrid retrieval and reranking, using the local open llama3:8b generator as the private default. That configuration is private, costs essentially nothing to run, scores 0.689 on answer correctness, and returns an answer in roughly 20 seconds. The closed gpt-5.4-mini model can be offered as an optional higher-accuracy tier for non-sensitive queries only. We do not recommend deploying the agentic pipeline in its current form. The items needing resources beyond this phase, chiefly a calibrated human-expert evaluation and validation on non-public documents, are carried forward as prioritized future work.
 
 **Keywords:** retrieval-augmented generation; local LLMs; document question answering; hybrid retrieval; reranking; PIRLS; evaluation.
 
@@ -43,17 +43,17 @@ Knowledge workers increasingly rely on AI to locate information more quickly, bu
 
 This study uses the 2021 PIRLS dataset for development and evaluation. PIRLS was selected for the complexity and diversity of its content, which spans statistical methodology, dense policy and assessment frameworks, and country-level encyclopedic information. These properties make it representative of the high-value, unstructured documentation IEA produces.
 
-This phase focuses on extracting and retrieving high-density information from PDF documents. Multi-modal and structured sources such as SQL databases, spreadsheets, and HTML, together with high-fidelity table extraction, lie outside its scope; §6.5 explains why tables in particular were deferred. The results are intended both as a benchmark and as the basis for a future production deployment.
+This phase focuses on extracting and retrieving high-density information from PDF documents. Multi-modal and structured sources such as SQL databases, spreadsheets, and HTML, together with high-fidelity table extraction, lie outside its scope; §5.5 explains why tables in particular were deferred. The results are intended both as a benchmark and as the basis for a future production deployment.
 
 ### 1.3 Motivations and Research Questions
 
-The original report stated the project's significance as a set of forward claims about what a locally-hosted RAG system would deliver. Those claims are better framed as motivations drawn from the literature together with the questions this study seeks to test. A locally-hosted RAG system could benefit IEA in three ways, and we treat each as a question to answer with evidence rather than a benefit to assert in advance.
+A locally-hosted RAG system could benefit IEA in three ways. We frame each not as a benefit to assert in advance but as a motivation drawn from the literature together with a question this study sets out to test with evidence.
 
-The first is retrieval efficiency. RAG can let researchers ask natural-language questions and receive concise, source-grounded answers instead of searching large document collections manually. The research question is whether retrieval materially improves answer quality over an LLM used alone, tested in §6.3.
+The first is retrieval efficiency. RAG can let researchers ask natural-language questions and receive concise, source-grounded answers instead of searching large document collections manually. The research question is whether retrieval materially improves answer quality over an LLM used alone, tested in §5.3.
 
-The second is reliability through grounding. Grounding answers in retrieved passages should reduce hallucination and improve verifiability (Lewis et al., 2020; Gao et al., 2024). The research question is how faithful and how correct the grounded answers actually are, and where they fail, examined in §6.2 and §6.4.
+The second is reliability through grounding. Grounding answers in retrieved passages should reduce hallucination and improve verifiability (Lewis et al., 2020; Gao et al., 2024). The research question is how faithful and how correct the grounded answers actually are, and where they fail, examined in §5.2 and §5.4.
 
-The third is privacy and control. Local deployment keeps all processing on-premises, which supports compliance and internal policy. The research question is whether an open, locally-deployable model can reach acceptable quality without a cloud service, tested in §7.2.3.
+The third is privacy and control. Local deployment keeps all processing on-premises, which supports compliance and internal policy. The research question is whether an open, locally-deployable model can reach acceptable quality without a cloud service, tested in §6.1.3.
 
 Beyond these, the project establishes a foundation for later AI applications at IEA, such as report summarization, research assistance, and AI-assisted data cleaning. Those applications remain prospective and are not evaluated here.
 
@@ -71,7 +71,7 @@ This report makes five contributions.
 
 RAG couples a parametric language model with a non-parametric document store to improve factuality on knowledge-intensive tasks (Lewis et al., 2020). Surveys of the area find that RAG performance depends as much on retrieval quality and document preprocessing as on the generator itself (Gao et al., 2024), a theme our results corroborate.
 
-A common motivation for "agentic" RAG is that complex questions benefit from being broken into sub-problems (Khot et al., 2022) and from iterative self-reflection (Shinn et al., 2023). Corrective RAG (CRAG) adds a validation step after retrieval that checks whether the retrieved documents are relevant before they are used (Yan et al., 2024), and GraphRAG models a corpus as connected units to support multi-hop retrieval and global summarization (Edge et al., 2024). Selective methods such as Self-RAG extend this further, determining for each query whether retrieval is required at all (Asai et al., 2023). Our Advanced pipeline draws on the first two ideas, decomposition and post-retrieval validation, and §6.4 reports the outcome of having a small local model execute this machinery.
+A common motivation for "agentic" RAG is that complex questions benefit from being broken into sub-problems (Khot et al., 2022) and from iterative self-reflection (Shinn et al., 2023). Corrective RAG (CRAG) adds a validation step after retrieval that checks whether the retrieved documents are relevant before they are used (Yan et al., 2024), and GraphRAG models a corpus as connected units to support multi-hop retrieval and global summarization (Edge et al., 2024). Selective methods such as Self-RAG extend this further, determining for each query whether retrieval is required at all (Asai et al., 2023). Our Advanced pipeline draws on the first two ideas, decomposition and post-retrieval validation, and §5.4 reports the outcome of having a small local model execute this machinery.
 
 On the retrieval side, the retrieve-then-rerank pattern is standard practice: a wide first-stage retrieval is followed by a cross-encoder that re-scores the candidates and keeps the best few (Nogueira & Cho, 2019). Hybrid retrieval, which fuses sparse BM25 scores (Robertson & Zaragoza, 2009) with dense vector similarity (Karpukhin et al., 2020), often using reciprocal rank fusion (Cormack et al., 2009), raises recall on entity-heavy queries that dense embeddings alone tend to miss. Both techniques prove to be the most effective levers in this study.
 
@@ -85,7 +85,7 @@ This section describes the techniques on which the remainder of the report depen
 
 ### 2.1 Retrieval-Augmented Generation
 
-Without an external source of information, a language model answers from the parameters it acquired during training. For a corpus such as PIRLS, this is inadequate sincethe model may not have encountered the documents during training so a confident answer cannot be verified. Retrieval-Augmented Generation (Lewis et al., 2020) addresses this limitation. Rather than relying on the model's recall, it supplies the relevant source passages to the model at the time of answering, so that the model operates on text that is explicitly available to it and every claim can be traced to a document.
+Without an external source of information, a language model answers from the parameters it acquired during training. For a corpus such as PIRLS, this is inadequate since the model may not have encountered the documents during training, so a confident answer cannot be verified. Retrieval-Augmented Generation (Lewis et al., 2020) addresses this limitation. Rather than relying on the model's recall, it supplies the relevant source passages to the model at the time of answering, so that the model operates on text that is explicitly available to it and every claim can be traced to a document.
 
 The method operates in two phases. The first is performed once, before any question is posed. Each document is divided into chunks of a few hundred words, and every chunk is processed by an embedding model that converts it into a vector — a sequence of numbers positioned such that passages with similar content occupy nearby regions of a high-dimensional space. These vectors are stored in a vector store (here, Chroma). The second phase occurs at query time. The question is embedded by the same model, and the system compares the question's vector against each chunk's vector using cosine similarity, the cosine of the angle between them:
 
@@ -99,7 +99,7 @@ In this basic form, the most important parameter is $k$, the number of chunks re
 
 Basic RAG accepts the retriever's ranking without verification. Whatever chunks occupy the top-$k$ positions are passed to the prompt, and any that are off-topic become noise. Corrective RAG (CRAG; Yan et al., 2024) introduces a verification step between retrieval and generation. Each retrieved chunk is assessed for relevance; those judged irrelevant are removed, and if too little context remains, the system may retrieve again or revert to the original set. The objective is to refine the context before the generator processes it.
 
-The effectiveness of this step depends entirely on the quality of the judge. A reliable judge removes genuine distractors while preserving the answer-bearing chunks. An unreliable judge causes harm, because the step can only remove chunks and cannot recover one that was wrongly discarded. When a chunk containing the answer is removed, recall decreases and no subsequent stage can compensate. §6.4 demonstrates that the lightweight grader incorporated into our first agentic pipeline discards answer-bearing chunks often enough that the correction step lowers answer quality rather than improving it.
+The effectiveness of this step depends entirely on the quality of the judge. A reliable judge removes genuine distractors while preserving the answer-bearing chunks. An unreliable judge causes harm, because the step can only remove chunks and cannot recover one that was wrongly discarded. When a chunk containing the answer is removed, recall decreases and no subsequent stage can compensate. §5.4 demonstrates that the lightweight grader incorporated into our first agentic pipeline discards answer-bearing chunks often enough that the correction step lowers answer quality rather than improving it.
 
 ### 2.3 Hybrid Retrieval
 
@@ -109,7 +109,7 @@ The established remedy is lexical search. BM25 (Robertson & Zaragoza, 2009) scor
 
 $$\mathrm{BM25}(q, d) = \sum_{t \in q} \mathrm{IDF}(t) \cdot \frac{f(t,d)\,(k_1 + 1)}{f(t,d) + k_1\,(1 - b + b\,\frac{|d|}{\mathrm{avgdl}})}$$
 
-Here $f(t,d)$ is the frequency of term $t$ in chunk $d$, $IDF(t)$ is higher for rarer terms, $|d|$ is the chunk's length, $avgdl$ is the average chunk length, and $k_1$ and $b$ are small tuning constants. As a result, BM25 can reliably locates the chunk that contains "Germany" or "plausible values," in which dense search is least dependable.
+Here $f(t,d)$ is the frequency of term $t$ in chunk $d$, $IDF(t)$ is higher for rarer terms, $|d|$ is the chunk's length, $avgdl$ is the average chunk length, and $k_1$ and $b$ are small tuning constants. As a result, BM25 reliably locates the chunk that contains "Germany" or "plausible values," where dense search is least dependable.
 
 Hybrid retrieval performs both searches and combines their results, so that a chunk is retained if either method ranks it highly. We combine them using reciprocal rank fusion (RRF; Cormack et al., 2009), which disregards the raw scores — since a cosine similarity and a BM25 score are not on a common scale — and uses only the position of each chunk within each list:
 
@@ -123,7 +123,7 @@ The retrievers described above are fast because they process the question and ea
 
 A cross-encoder eliminates this approximation. Rather than encoding the two elements separately, it processes the question and a single candidate chunk jointly, allowing every term of the question to attend to every term of the chunk, and produces a single relevance score informed by both (Nogueira & Cho, 2019). It is considerably more accurate, but far too slow to apply across the entire index for every query.
 
-The combination of the first method's speed and the second's accuracy is achieved by applying them in sequence, which is the approach this report adopts. The fast retriever returns a broad set of candidates — in this case, the top 20 — and the slower but more accurate cross-encoder re-scores only those 20 and retains the best 4 for the generator. The expensive model therefore processes no more than a small number of chunks, so the additional cost is modest, while the chunk that genuinely answers the question is promoted into the few that the generator receives, even when it lay outside the initial top 4. §7.2 measures this effect and demonstrates that it is the single largest source of the quality gains reported here.
+The combination of the first method's speed and the second's accuracy is achieved by applying them in sequence, which is the approach this report adopts. The fast retriever returns a broad set of candidates — in this case, the top 20 — and the slower but more accurate cross-encoder re-scores only those 20 and retains the best 4 for the generator. The expensive model therefore processes no more than a small number of chunks, so the additional cost is modest, while the chunk that genuinely answers the question is promoted into the few that the generator receives, even when it lay outside the initial top 4. §6.1 measures this effect and demonstrates that it is the single largest source of the quality gains reported here.
 
 ---
 
@@ -148,7 +148,7 @@ Measured directly from the live index, the knowledge base has the following scal
 | On-disk footprint | 70.9 MB |
 | Embedding model | `sentence-transformers/all-mpnet-base-v2` (768-dim) |
 
-The chunking parameters and the choice of embedding model are examined in §7.2.4, where we show that retrieval quality, not chunk granularity, is the binding constraint.
+The chunking parameters and the choice of embedding model are examined in §6.1.4, where we show that retrieval quality, not chunk granularity, is the binding constraint.
 
 ### 3.2 User Survey
 
@@ -168,7 +168,7 @@ Both pipelines run on a local open-source stack. LangChain handles document load
 
 *Figure 1. The Basic RAG pipeline. Documents are chunked, embedded, and stored; a query is embedded, the top-k chunks are retrieved, and the model answers using only the retrieved context.*
 
-The Basic pipeline is a linear retrieve-then-generate path. PDFs are ingested and chunked, the chunks are embedded and stored in Chroma, and at query time the system retrieves the top-$k$ chunks by similarity. Those chunks are injected into a prompt that instructs the model to answer using only the provided context and to indicate when the answer is not present. The model then generates the answer. The original implementation retrieved the top chunks by dense similarity alone; §7.2 replaces that with a wider retrieval followed by reranking and hybrid fusion, which is the source of most of our gains.
+The Basic pipeline is a linear retrieve-then-generate path. PDFs are ingested and chunked, the chunks are embedded and stored in Chroma, and at query time the system retrieves the top-$k$ chunks by similarity. Those chunks are injected into a prompt that instructs the model to answer using only the provided context and to indicate when the answer is not present. The model then generates the answer. In its baseline form the pipeline retrieves the top chunks by dense similarity alone; §6.1 replaces that with a wider retrieval followed by reranking and hybrid fusion, which is the source of most of our gains.
 
 #### 3.3.2 Advanced Architecture (Advanced RAG)
 
@@ -178,9 +178,9 @@ The Basic pipeline is a linear retrieve-then-generate path. PDFs are ingested an
 
 The Advanced pipeline runs as a stateful graph rather than a linear path. Its intended design decomposes a complex query into sub-questions, validates the retrieved documents, answers each sub-question, and synthesizes a final answer from those parts.
 
-There is an important correction between what the original report described and what was actually evaluated. The original report described the Advanced pipeline as already performing per-sub-question re-retrieval and reranking. The version that was actually measured, which we now call Advanced v1, did neither. Its sub-questions reused the original query's retrieved documents, and no reranker was integrated into the graph. Its only active post-retrieval step was a binary relevance grader run by a small `gemma3:1b` model. The intended re-retrieval and reranking were built later, in the Advanced v2 and v3 iterations described in §7.3. To preserve the integrity of the analysis, we describe each version by what it actually implemented and attribute results accordingly.
+This report evaluates three versions of the pipeline, and each is described by what it actually implements. The first, Advanced v1, performs neither per-sub-question re-retrieval nor reranking: its sub-questions reuse the original query's retrieved documents, and no reranker is integrated into the graph. Its only active post-retrieval step is a binary relevance grader run by a small `gemma3:1b` model. Per-sub-question re-retrieval and reranking are added later, in the Advanced v2 and v3 iterations described in §6.2. Results are attributed to each version according to what it implements.
 
-**Advanced v1, as built.** Figure 3 shows the pipeline that was actually evaluated, a five-stage graph. First, it retrieves the top four chunks for the original query. Second, a small `gemma3:1b` model grades each chunk as relevant or not and drops those it rejects; if it rejects all four, the pipeline keeps the original four rather than proceeding with no context. Third, it decomposes the query into two or three sub-questions, but answers each from the same original chunks, with no fresh retrieval. Fourth, it answers the sub-questions and synthesizes a final answer capped at 100 words. Fifth, the same `gemma3:1b` model grades the answer for usefulness, and an answer judged unhelpful is regenerated up to two times. The two steps that distinguish v1 from Basic RAG, the binary grader and the decomposition, are precisely the ones §6.4 finds to be net-negative on this corpus.
+**Advanced v1, as built.** Figure 3 shows the pipeline that was actually evaluated, a five-stage graph. First, it retrieves the top four chunks for the original query. Second, a small `gemma3:1b` model grades each chunk as relevant or not and drops those it rejects; if it rejects all four, the pipeline keeps the original four rather than proceeding with no context. Third, it decomposes the query into two or three sub-questions, but answers each from the same original chunks, with no fresh retrieval. Fourth, it answers the sub-questions and synthesizes a final answer capped at 100 words. Fifth, the same `gemma3:1b` model grades the answer for usefulness, and an answer judged unhelpful is regenerated up to two times. The two steps that distinguish v1 from Basic RAG, the binary grader and the decomposition, are precisely the ones §5.4 finds to be net-negative on this corpus.
 
 ![Figure 3. Advanced v1 (CRAG) as built.](figures/fig_adv_v1.svg)
 
@@ -192,7 +192,7 @@ There is an important correction between what the original report described and 
 
 *Figure 4. Advanced v2 adds per-sub-question retrieval and a de-duplicated union (highlighted) on top of v1. The extra retrieval widens the context with chunks that are relevant to the sub-questions but off-topic for the original query.*
 
-**Advanced v3, as built.** Advanced v3 is a rerank-aware redesign that runs on the improved retriever from §7.2. It changes four things relative to v1. First, it replaces the binary `gemma3:1b` grader with reranker-score thresholding, so chunks are filtered by a graded relevance score rather than a keep-or-drop decision. Second, it decomposes adaptively: a question whose top reranked chunk scores at least 0.7 and clearly outscores the runner-up is treated as single-hop and answered directly, while the rest are decomposed as in v2. Third, for decomposed questions it reranks the combined sub-question chunks against the original query before generating. Fourth, it synthesizes the final answer from that reranked context rather than from the separate sub-answers. If no reranker is available, the pipeline falls back to v2. Figure 5 shows the flow.
+**Advanced v3, as built.** Advanced v3 is a rerank-aware redesign that runs on the improved retriever from §6.1. It changes four things relative to v1. First, it replaces the binary `gemma3:1b` grader with reranker-score thresholding, so chunks are filtered by a graded relevance score rather than a keep-or-drop decision. Second, it decomposes adaptively: a question whose top reranked chunk scores at least 0.7 and clearly outscores the runner-up is treated as single-hop and answered directly, while the rest are decomposed as in v2. Third, for decomposed questions it reranks the combined sub-question chunks against the original query before generating. Fourth, it synthesizes the final answer from that reranked context rather than from the separate sub-answers. If no reranker is available, the pipeline falls back to v2. Figure 5 shows the flow.
 
 ![Figure 5. Advanced v3 (rerank-aware) as built.](figures/fig_adv_v3.svg)
 
@@ -204,11 +204,11 @@ Three Advanced versions appear in this report.
 
 | Version | Additional Features | Status |
 |---|---|---|
-| Advanced v1 | `gemma3:1b` document grader; decomposition that reuses the original documents; synthesis capped at 100 words | Evaluated; this is the original "advanced" system |
-| Advanced v2 | per-sub-question re-retrieval plus chunk de-duplication; no word cap | Evaluated (§7.3) |
-| Advanced v3 | reranker-score grader; reranks the sub-question union against the original query; adaptive decomposition; synthesizes from reranked context | Evaluated on the improved retriever (§7.3); matches Basic (0.780 vs 0.774), does not surpass it |
+| Advanced v1 | `gemma3:1b` document grader; decomposition that reuses the query's own documents; synthesis capped at 100 words | Evaluated; this is the initial "advanced" system |
+| Advanced v2 | per-sub-question re-retrieval plus chunk de-duplication; no word cap | Evaluated (§6.2) |
+| Advanced v3 | reranker-score grader; reranks the sub-question union against the original query; adaptive decomposition; synthesizes from reranked context | Evaluated on the improved retriever (§6.2); matches Basic (0.780 vs 0.774), does not surpass it |
 
-Each version is described above as it was actually built; the reasoning behind each change, and the evaluation results, are reported in §7.3.
+Each version is described above as it was actually built; the reasoning behind each change, and the evaluation results, are reported in §6.2.
 
 ---
 
@@ -216,17 +216,17 @@ Each version is described above as it was actually built; the reasoning behind e
 
 ### 4.1 Hardware
 
-The original prototype was built and tested on an Alienware M18 (Intel Core i9-13980HX, NVIDIA RTX 4090 Laptop GPU 16 GB, 64 GB RAM); we avoided cloud GPUs to keep the system offline and to stress-test it under realistic local constraints. The re-evaluation here, covering the improvement experiments in §6 and §7, ran on a different machine because access to the RTX 4090 laptop was limited at the time. The machine used in the re-evaluation was an Intel Core Ultra 9 (16 cores), 32 GB RAM, and an Intel Arc Pro 140T GPU (16 GB). Consequently, the response-time figures in this revision are not comparable to the latency in the original report. The quality metrics (context precision and recall, faithfulness, and answer correctness) are hardware-independent and unaffected. The deployment implications of running on a single machine are discussed in §8.2.
+The experiments were run on a workstation-class laptop: an Intel Core Ultra 9 (16 cores), 32 GB RAM, and an Intel Arc Pro 140T GPU (16 GB). We avoided cloud GPUs to keep the system offline and to test it under realistic local constraints. The response-time figures in this report are specific to this hardware, while the quality metrics (context precision and recall, faithfulness, and answer correctness) are hardware-independent. The deployment implications of running on a single machine are discussed in §7.2.
 
 ### 4.2 Models
 
 The choice of models follows from the privacy goal. Since the aim is to keep data on the organization's own hardware, the generator has to be an open-weight model that can run locally. A closed, cloud-hosted model would send every query and every retrieved passage to an external server, which is the situation this project tries to avoid. 
 
-Model size was the next constraint. Early tests with large models such as Llama-2 70B were unusable on local hardware, with single queries taking minutes (one PIRLS question took 139.46 seconds, another 59.2). We therefore standardized on sub-10B open-weight models, which keep response times usable on a single GPU. Llama 3 (8B) is the primary generator, chosen for its quality at that size. The original report had also evaluated Gemma 3 (4B), which scored on par with Llama 3 8B (answer correctness 0.42 against 0.41). This model was not carried forward, since the re-evaluation fixed a single generator and probed strength only at the extremes — a stronger open-source reasoning model, DeepSeek-R1 (8B) (DeepSeek-AI, 2025), and a strong closed model, gpt-5.4-mini. For the controlled three-architecture comparison in §6 the generator is held fixed at llama3:8b so only the pipeline varies. The generator is then varied on its own in §7.2.3, applied to the best retrieval configuration. There, gpt-5.4-mini serves as an open-versus-closed benchmark to measure how much accuracy the privacy constraint costs.
+Model size was the next constraint. Early tests with large models such as Llama-2 70B were unusable on local hardware, with single queries taking minutes (one PIRLS question took 139.46 seconds, another 59.2). We therefore standardized on sub-10B open-weight models, which keep response times usable on a single GPU. Llama 3 (8B) is the primary generator, chosen for its quality at that size. We fixed a single generator for the controlled comparison and probed generator strength only at the extremes: a stronger open-source reasoning model, DeepSeek-R1 (8B) (DeepSeek-AI, 2025), and a strong closed model, gpt-5.4-mini. Gemma 3 (4B), a comparable mid-size open model, was not carried forward, because a second model of similar capability would add little to that design. For the controlled three-architecture comparison in §5 the generator is held fixed at llama3:8b so only the pipeline varies. The generator is then varied on its own in §6.1.3, applied to the best retrieval configuration. There, gpt-5.4-mini serves as an open-versus-closed benchmark to measure how much accuracy the privacy constraint costs.
 
-Two of the agentic pipelines use a second, smaller model as an internal grader that scores each retrieved chunk for relevance (§2.2). We use gemma3:1b for that role. The grader only runs once per chunk and it should not add latency. Therefore we use gemma3:1b for that role. However, §6.4 shows that this economy proves a poor trade-off on this corpus.
+Two of the agentic pipelines use a second, smaller model as an internal grader that scores each retrieved chunk for relevance (§2.2). We use gemma3:1b for that role, since it runs once per chunk and should add little latency. However, §5.4 shows that this economy proves a poor trade-off on this corpus.
 
-All quality metrics are scored by a single LLM judge, `gpt-oss-120b`, served through an OpenAI-compatible API. Three considerations drove that choice. It is an open-weight model, so the evaluation is reproducible by anyone and does not depend on a proprietary endpoint that can change or be withdrawn. It is much larger than any system under test, so it grades their outputs from a position of greater capability. And it is held fixed across every run, so a difference in score reflects a difference in the systems rather than drift in the judge. An earlier evaluation pass used a different framework and judge, which is why scores are not comparable across passes; §7.1 covers this.
+All quality metrics are scored by a single LLM judge, `gpt-oss-120b`, served through an OpenAI-compatible API. Three considerations drove that choice. It is an open-weight model, so the evaluation is reproducible by anyone and does not depend on a proprietary endpoint that can change or be withdrawn. It is much larger than any system under test, so it grades their outputs from a position of greater capability. And it is held fixed across every run, so a difference in score reflects a difference in the systems rather than drift in the judge.
 
 ### 4.3 Metrics
 
@@ -254,15 +254,13 @@ An answer that states one supported fact and one fact absent from the context sc
 
 The fifth check, new in this revision, is gold-context similarity: the maximum cosine similarity between the gold reference passage and any retrieved chunk. It is deterministic and needs no judge, which makes it a cheap, repeatable way to ask whether retrieval surfaced the right passage at all, independent of how the judge scored the final answer.
 
-We chose DeepEval over RAGAS after RAGAS proved both far slower and unreliable on a local judge, as §7.1 recounts. For latency, lower is better.
+We chose DeepEval over RAGAS, which proved both slower and unreliable on a local judge. For latency, lower is better.
 
 ### 4.4 Evaluation Dataset Construction
 
-The evaluation set is the same 195 question–answer pairs the original report scored, now annotated with explicit human/synthetic provenance and held in `datasets/revision/`. These 195 are the items from the original report's 300-item pool that both pipelines could complete; the rest were set aside because the advanced pipeline's outputs exceeded the judge's token limit. We reuse this selection unchanged, both for comparability with the original report and because the full 300-item pool has a train/evaluation leakage problem (§7.2.4) that makes its surplus items unsuitable as held-out data.
+The evaluation set is 195 question–answer pairs annotated with explicit human/synthetic provenance and held in `datasets/revision/`. These 195 are the items from an initial 300-item pool that both pipelines could complete; the rest were set aside because the advanced pipeline's outputs exceeded the judge's token limit. We use this selection because the full 300-item pool has a train/evaluation leakage problem (§6.1.4) that makes its surplus items unsuitable as held-out data.
 
-Of the 195 pairs, 123 are human-generated, authored by a domain expert, with each answer traceable to the source documents; these anchor the evaluation. The remaining 72 are synthetic, generated with a large model from passages in the corpus to broaden coverage. Because synthetic items may not reflect real user intent, we report results split by provenance throughout §6.2 and §6.3.
-
-#### 4.4.1 Dataset Composition: Provenance and Question Coverage
+Of the 195 pairs, 123 are human-generated, authored by a domain expert, with each answer traceable to the source documents; these anchor the evaluation. The remaining 72 are synthetic, generated with a large model from passages in the corpus to broaden coverage. Because synthetic items may not reflect real user intent, we report results split by provenance throughout §5.2 and §5.3.
 
 To characterize what the evaluation set tests, we classified all 195 questions by cognitive level and subtype, using the same `gpt-oss-120b` model (`scripts/classify_questions.py`).
 
@@ -277,50 +275,13 @@ To characterize what the evaluation set tests, we classified all 195 questions b
 | Fact-retrieval | 68.2% (133) | 77.2% | 52.8% |
 | Reasoning (why/how/analysis) | 31.8% (62) | 22.8% | 47.2% |
 
-The set is dominated by fact-retrieval questions at about 68%, while the deep methodological "why and how" questions are under-sampled: sampling at 4.6%, plausible values and scaling at 3.1%, and weighting and variance at 1.5%, roughly 9% combined. We note this as a limitation in §8 and recommend deliberately over-sampling reasoning-heavy methodological questions in any follow-up evaluation set.
+The set is dominated by fact-retrieval questions at about 68%, while the deep methodological "why and how" questions are under-sampled: sampling at 4.6%, plausible values and scaling at 3.1%, and weighting and variance at 1.5%, roughly 9% combined. We note this as a limitation in §7 and recommend deliberately over-sampling reasoning-heavy methodological questions in any follow-up evaluation set.
 
 ---
 
-## 5. Relation to the Original Report
+## 5. Results and Discussion
 
-The original report and this revision are two evaluations of the same family of systems, carried out a few months apart with different evaluation machinery. This section connects them: how the experiment program unfolded, what the original report measured, and why the numbers here differ from the ones it published.
-
-### 5.1 Experimental Progression
-
-The work started from the prototype and the findings in the original report, and it proceeded in a deliberate order that explains the shape of the experiment matrix in Appendix B.
-
-We first corrected the problems in the original evaluation (§7.1 sets them out) and re-ran the Basic pipeline to establish a reliable baseline. We then applied the same corrections to the Advanced pipeline and re-evaluated it, first as Advanced v1 and then, after reworking its sub-question handling, as Advanced v2. Across that corrected comparison the Basic pipeline remained ahead (§6.1), so we concentrated the improvement effort there rather than on the agentic machinery.
-
-That decision is why the middle of the experiment matrix varies only the Basic pipeline. The sequence of retrieval and generator levers — reranking, then hybrid retrieval, then a stronger generator up to gpt-5.4-mini — was explored on Basic alone, because Basic was the configuration worth improving. Only once those levers had been characterized did we incorporate the best of them, hybrid retrieval with a cross-encoder reranker, into the agentic pipeline. That is the last pair of runs, Advanced v3 (rerank-aware, §7.3), whose purpose was narrow: to test whether a strong retrieval stack could be advanced further by the decomposition machinery. The progression runs baseline → corrected Advanced (v1, v2) → a Basic-only improvement search → Advanced v3, and Appendix B reads in that order.
-
-### 5.2 Original Results and Corrections
-
-The original report evaluated the Basic and Advanced pipelines across three local generators; its headline numbers are reproduced in Table 4.
-
-**Table 4. Results as reported in the original report (averaged over the same 195 items; higher is better; latency on the original RTX-4090 hardware, in seconds).**
-
-| Pipeline | Generator | Ctx Precision | Ctx Recall | Faithfulness | Answer Correctness | Latency (s) |
-|---|---|---|---|---|---|---|
-| Basic | Llama 3 8B | 0.62 | 0.54 | 0.98 | 0.41 | 7.4 |
-| Basic | Gemma 3 4B | 0.64 | 0.56 | 0.97 | 0.42 | 5.9 |
-| Basic | DeepSeek-R1 8B | 0.63 | 0.54 | 0.97 | 0.44 | 19.0 |
-| Advanced | Llama 3 8B | 0.29 | 0.31 | 0.97 | 0.23 | 22.9 |
-| Advanced | Gemma 3 4B | 0.31 | 0.29 | 0.96 | 0.24 | 15.4 |
-| Advanced | DeepSeek-R1 8B | 0.33 | 0.30 | 0.98 | 0.28 | 82.6 |
-
-Two observations are notable. The original report already found Basic ahead of Advanced on every model, the same conclusion this revision reaches, so the overall direction has not changed. But the absolute numbers differ sharply, and the difference is largest for the Advanced pipeline. The original report reported its context precision as 0.29; for the same pipeline on the same questions, we now measure 0.690 (Table 5).
-
-That gap is a measurement error, not a change in system behavior. The Advanced pipeline retrieved the same chunks as Basic, but logged them in a format that drove the ranking metrics toward zero. Re-scoring the identical retrieval from a correct log restores Advanced's precision and recall to Basic's range, which removes most of the precision gap reported originally. §7.1 details the mechanism.
-
-The logging bug did not affect Basic, yet its scores still changed: context recall rose from 0.54 to 0.80 and precision from 0.62 to 0.74. These gains come from fixing the prototype and hardening the evaluation. The re-evaluation repaired a retrieval defect, fixed the retrieval depth at k = 4, logged the retrieved context as a proper chunk list, and held a single judge constant across all runs. The embedding model was `all-mpnet-base-v2` in both the original prototype and this re-evaluation; the original report's reference to "embeddinggemma" was a labelling error (§7.2.4), not a system change. The result is a Basic baseline whose context precision and recall are measured accurately, so improvements can target specific weaknesses and each change can be validated against a reliable score.
-
-The two evaluations differ in measurement methodology: a repaired retrieval path, chunk-list context logging, and a single judge held constant across runs. The absolute values in Table 4 are therefore not directly comparable to the re-evaluation results reported elsewhere in this report. Only the within-evaluation ordering is comparable, and it is consistent: Basic outperforms Advanced in both.
-
----
-
-## 6. Results and Discussion
-
-### 6.1 Architecture Comparison
+### 5.1 Architecture Comparison
 
 The controlled comparison holds the dataset, judge, embeddings, retrieval, and generator (llama3:8b) constant, and varies only the architecture.
 
@@ -328,7 +289,7 @@ The controlled comparison holds the dataset, judge, embeddings, retrieval, and g
 
 *Figure 7. The final-evaluation comparison of Basic, Advanced v1, and Advanced v2 across four quality metrics (llama3:8b, n=195).*
 
-**Table 5. Basic vs Advanced pipelines (llama3:8b, n=195, `gpt-oss-120b` judge).** Higher is better; latency is lower-is-better.
+**Table 4. Basic vs Advanced pipelines (llama3:8b, n=195, `gpt-oss-120b` judge).** Higher is better; latency is lower-is-better.
 
 | Architecture | Ctx Precision | Ctx Recall | Faithfulness | Answer Correctness | Gold-Ctx Sim | Latency (s) |
 |---|---|---|---|---|---|---|
@@ -338,21 +299,21 @@ The controlled comparison holds the dataset, judge, embeddings, retrieval, and g
 
 The Basic pipeline performs best or ties on four of the five quality metrics. Advanced v1 matches Basic on answer correctness (0.474 against 0.473) but loses recall, and Advanced v2 regresses on both precision and answer correctness. Faithfulness stays high everywhere, between about 0.91 and 0.95, so all three pipelines ground their answers well in whatever context they receive. The differences between them lie in how each pipeline selects and uses context, not in raw grounding. Latency rises sharply with complexity, reaching 3.8 times and 5.2 times the Basic pipeline's response time.
 
-### 6.2 Metric-by-Metric Analysis
+### 5.2 Metric-by-Metric Analysis
 
-On context precision and recall, the Basic pipeline retrieves focused, on-topic context, scoring 0.74 on precision and 0.80 on recall. Advanced v1 loses recall, dropping to 0.67, and Advanced v2 loses precision substantially, to 0.45. §6.4 attributes each loss to a specific stage of the pipeline.
+On context precision and recall, the Basic pipeline retrieves focused, on-topic context, scoring 0.74 on precision and 0.80 on recall. Advanced v1 loses recall, dropping to 0.67, and Advanced v2 loses precision substantially, to 0.45. §5.4 attributes each loss to a specific stage of the pipeline.
 
 Faithfulness is uniformly high, between 0.91 and 0.95, so grounding is not the source of difficulty. When these models are provided with context, they rarely contradict it. This argues against weak reasoning as the primary failure mode, and against fine-tuning as the first lever to consider.
 
-Answer correctness is approximately 0.47 for all three architectures on the base model. §6.4 explains the ceiling, and §7.2 shows how improved retrieval raises it to 0.689 without any change to the model.
+Answer correctness is approximately 0.47 for all three architectures on the base model. §5.4 explains the ceiling, and §6.1 shows how improved retrieval raises it to 0.689 without any change to the model.
 
 On response time, the single-pass Basic pipeline is far faster. The Advanced pipelines run several sequential model calls for grading, per-sub-question generation, and synthesis, so the latency compounds, and it is worst for reasoning models, with DeepSeek-R1 exceeding 80 seconds per query.
 
 ![Figure 8. Mean latency per question.](figures/fig3_latency.svg)
 
-*Figure 8. Mean latency per question, in seconds, measured on the re-evaluation laptop (Intel Arc Pro 140T). These are not comparable to the original report's RTX-4090 timings, and the API runs marked with an asterisk use hosted GPUs that are not comparable to the local runs either.*
+*Figure 8. Mean latency per question, in seconds, measured on the workstation-class laptop (Intel Arc Pro 140T). The API runs marked with an asterisk use hosted GPUs that are not comparable to the local runs.*
 
-### 6.3 The Value of Retrieval: An Ablation Study
+### 5.3 The Value of Retrieval: An Ablation Study
 
 Two questions about whether the system justifies its complexity merit direct examination. First, does RAG outperform a general-purpose LLM used without retrieval? Second, what does the generator add over simply returning the retrieved chunks? A single ablation answers both, scoring answer correctness across five conditions on the same 195 questions with the same judge.
 
@@ -360,7 +321,7 @@ Two questions about whether the system justifies its complexity merit direct exa
 
 *Figure 9. Answer correctness by condition (n=195). Retrieval lifts correctness sharply for both the open and the closed generator. The retrieval-only bar is high only as an artifact of how G-Eval scores answer correctness: it rewards coverage of the reference facts and does not penalize a verbose, unsynthesized chunk dump, so a roughly 4,000-character blob that happens to contain the gold facts scores well. It is not a usable answer, and it is not comparable to the RAG bars, which are held to producing a concise, synthesized response.*
 
-**Table 6. Value-added ablation (answer correctness).**
+**Table 5. Value-added ablation (answer correctness).**
 
 | Condition | What it is | Overall | Human | Synthetic |
 |---|---|---|---|---|
@@ -372,9 +333,9 @@ Two questions about whether the system justifies its complexity merit direct exa
 
 Retrieval helps both the open and the closed generator. Holding the generator fixed, retrieval lifts answer correctness from 0.202 to 0.689 for the local open model, a gain of +0.49, and from 0.490 to 0.774 for the strong closed model, a gain of +0.28. Retrieval adds substantial accuracy even to the closed model that scores best without it. On this corpus the deployable open 8B model is nearly unusable without retrieval, which provides the empirical justification the design requires. The result is also consistent with the often-cited NAEP finding (Wei, 2024) that a much larger closed model (GPT-4o) scored well without retrieval: the two observations are consistent once model scale is accounted for, since our own closed-book closed model is far stronger than the open one (0.490 against 0.202) yet still gains +0.28 from retrieval here. For the open model this project targets, retrieval is essential; even for the strongest closed model, it remains clearly beneficial.
 
-The generation result needs a careful reading. At face value the retrieval-only condition scores 0.827, above full RAG, which would suggest the generator has negative value. This is not true. The number is a scoring artifact (Figure 9): the retrieval-only "answer" is a roughly 4,000-character dump of the top chunks, and the answer-correctness metric rewards how many reference facts are present without penalizing length. A long dump that contains the gold facts scores well, while the generator's short synthesis loses points whenever it leaves out a fact to stay concise. A 4,000-character dump is not a usable answer, so the two conditions are not comparable. This fits the rest of the report: the system is limited by retrieval, not by generation. Once the right chunks are retrieved the facts are there, and the generator turns them into a short, attributable answer. Experts in the domain may do fine with the raw chunks, however non-experts need the synthesis. Measuring what the generator adds would require a concision or usability metric, not fact coverage alone (§8.3).
+The generation result needs a careful reading. At face value the retrieval-only condition scores 0.827, above full RAG, which would suggest the generator has negative value. This is not true. The number is a scoring artifact (Figure 9): the retrieval-only "answer" is a roughly 4,000-character dump of the top chunks, and the answer-correctness metric rewards how many reference facts are present without penalizing length. A long dump that contains the gold facts scores well, while the generator's short synthesis loses points whenever it leaves out a fact to stay concise. A 4,000-character dump is not a usable answer, so the two conditions are not comparable. This fits the rest of the report: the system is limited by retrieval, not by generation. Once the right chunks are retrieved the facts are there, and the generator turns them into a short, attributable answer. Experts in the domain may do fine with the raw chunks, however non-experts need the synthesis. Measuring what the generator adds would require a concision or usability metric, not fact coverage alone (§7.3).
 
-### 6.4 Locating the Performance Bottlenecks
+### 5.4 Locating the Performance Bottlenecks
 
 It is important to identify which stage of the advanced pipeline fails — decomposition, retrieval, reranking, or synthesis — rather than relying on competing explanations. The data localizes each loss to a specific, measured mechanism, and the conclusion is that the problem lies in retrieval and orchestration rather than in the small model's reasoning, since faithfulness is high everywhere.
 
@@ -386,15 +347,15 @@ The first loss is in Advanced v1, where the grader degrades recall. Its `gemma3:
 
 The second loss is in Advanced v2, where per-sub-question retrieval degrades precision. Decomposing roughly 73% of the questions and then retrieving fresh chunks for each sub-question widens the context, from a mean of 4.0 chunks to 5.9, with material that is relevant to the sub-questions but off-topic for the original question against which precision is scored. That more than doubles the retrieval-failure rate: 107 of 195 rows fall below 0.5 precision, against 40 for Basic.
 
-The third factor is a shared generation ceiling. Even with good context, where precision is 0.7 or higher, llama3:8b produces a wrong answer on about 21% of rows. This is independent of architecture, and it caps answer correctness near 0.47 for all three pipelines. Improved retrieval (§7.2) recovers many of these rows by surfacing the exact gold chunk, and a stronger generator (§7.2.3) addresses the remainder.
+The third factor is a shared generation ceiling. Even with good context, where precision is 0.7 or higher, llama3:8b produces a wrong answer on about 21% of rows. This is independent of architecture, and it caps answer correctness near 0.47 for all three pipelines. Improved retrieval (§6.1) recovers many of these rows by surfacing the exact gold chunk, and a stronger generator (§6.1.3) addresses the remainder.
 
-Part of the precision and recall gap reported in the original report was also the logging artifact corrected in this revision and explained in §7.1. The practical implication is to invest in retrieval and orchestration, which §7.2 pursues and where the largest gains are found.
+The practical implication is to invest in retrieval and orchestration, which §6.1 pursues and where the largest gains are found.
 
-### 6.5 Tabular Data Extraction
+### 5.5 Tabular Data Extraction
 
-The system could not reliably extract information from tables with nested layouts or graphical elements. Standard PDF text extraction flattens table structure and loses the row-and-column relationships, so a figure that is obvious to a human reader becomes an unstructured sequence of numbers to the retriever. Treating tables as images for a vision-language model such as LLaVA (H. Liu et al., 2023) also performed poorly: fragments parsed, but headers and categories were misassociated, and a text embedding model is not built for spatial layout in any case. Given the engineering effort a proper fix would require, we deferred high-fidelity table extraction; §8.3 lists the specialized parsers we would evaluate next.
+The system could not reliably extract information from tables with nested layouts or graphical elements. Standard PDF text extraction flattens table structure and loses the row-and-column relationships, so a figure that is obvious to a human reader becomes an unstructured sequence of numbers to the retriever. Treating tables as images for a vision-language model such as LLaVA (H. Liu et al., 2023) also performed poorly: fragments parsed, but headers and categories were misassociated, and a text embedding model is not built for spatial layout in any case. Given the engineering effort a proper fix would require, we deferred high-fidelity table extraction; §7.3 lists the specialized parsers we would evaluate next.
 
-### 6.6 The Deployed User Interface
+### 5.6 The Deployed User Interface
 
 ![Figure 11. Production UI overview.](figures/orig/orig_fig9_ui.png)
 
@@ -414,47 +375,33 @@ To make this concrete, the example below is one question from the evaluation set
 
 **Top source chunk (one of the four shown to the user).** _"…these achievement items are arranged in blocks that are then assembled into student booklets containing different (but systematically overlapping) sets of item blocks…" — from the *Methods and Procedures* technical report (citing the PIRLS 2021 Assessment Design; Martin et al., 2019)._
 
-**Retrieval and timing.** Four chunks retrieved; answered in about 24 seconds on the re-evaluation laptop. The judge scored the answer 1.00 on answer correctness and 1.00 on faithfulness, and every claim is traceable to the source chunk it came from. This is a methodological "how" question, the harder and under-sampled category (§4.4.1), yet the answer is concise and fully grounded in the retrieved source.
+**Retrieval and timing.** Four chunks retrieved; answered in about 24 seconds on the workstation-class laptop. The judge scored the answer 1.00 on answer correctness and 1.00 on faithfulness, and every claim is traceable to the source chunk it came from. This is a methodological "how" question, the harder and under-sampled category (§4.4), yet the answer is concise and fully grounded in the retrieved source.
 
 ---
 
-## 7. System Improvements
+## 6. System Improvements
 
-### 7.1 Evaluation Hardening
-
-The benchmark proceeded through three passes. Only the final pass supports valid comparison, and the progression explains the discrepancy with the original report's figures.
-
-The first pass used RAGAS and was abandoned partway through, after the harness hit a cascade of API-quota errors, local-judge timeouts, and library-version failures and never produced complete scores for the Advanced pipeline. In response we pinned the evaluation stack and made scoring resilient to single-row failures.
-
-The second pass moved to DeepEval and exposed a measurement artifact. The Advanced pipeline's retrieved context had been logged as a single concatenated blob rather than a list of separate chunks. Context precision and recall are ranking metrics computed over a list, so a single blob drives them toward zero. That is what inflated the precision and recall gap in the original report. The cause is logging, not retrieval: the Advanced pipeline uses the same retriever and query as Basic and retrieves the same chunks, so the lower score reflects only how that text was recorded.
-
-This report relies on the third pass, which logs every system's context as a chunk list, fixes the retrieval bug, and holds the judge constant. It is the first trustworthy three-way comparison. Scores are comparable only within a pass, because the harness, embeddings, and judge all changed between passes. Faithfulness, for instance, rises between the first two passes, but that reflects the change of framework, not a real improvement.
-
-![Figure 13. Metric evolution across passes.](figures/fig1_metric_evolution.svg)
-
-*Figure 13. Metric evolution across the evaluation passes and experiments for the Basic-family runs. The shaded RAGAS region is not comparable; the trustworthy comparison begins at the final pass.*
-
-### 7.2 Improvement Levers
+### 6.1 Improvement Levers
 
 A retrieval-only diagnostic demonstrates why retrieval is the most important lever. The gold-bearing chunk is in the top 4 only 63% of the time, but it is in the top 20 fully 87% of the time. The remedy is to retrieve broadly and then rerank, promoting the gold chunk into the few that the generator receives.
 
-#### 7.2.1 Reranking
+#### 6.1.1 Reranking
 
 Retrieving the top 20 candidates and re-scoring them with a  cross-encoder to keep the best 4 increases answer correctness from 0.473 to 0.625, a 32% gain. Precision rises from 0.741 to 0.837 and recall from 0.796 to 0.837. The gain concentrates on the 40 worst-retrieval rows, where mean precision rises from 0.127 to 0.531 and answer correctness from 0.185 to 0.333.
 
-![Figure 14. Rerank gains on the worst rows.](figures/fig5_rerank_worstcase.svg)
+![Figure 13. Rerank gains on the worst rows.](figures/fig5_rerank_worstcase.svg)
 
-*Figure 14. The effect of reranking on the 40 worst-retrieval rows: mean precision and answer correctness both rise substantially, which is where the overall gain comes from.*
+*Figure 13. The effect of reranking on the 40 worst-retrieval rows: mean precision and answer correctness both rise substantially, which is where the overall gain comes from.*
 
-#### 7.2.2 Hybrid Retrieval
+#### 6.1.2 Hybrid Retrieval
 
 Adding sparse BM25 retrieval, fused with the dense retriever through reciprocal rank fusion and then reranked, increases answer correctness further, from 0.625 to 0.689, and raises recall to 0.909, the highest of any run. Lexical BM25 captures exact terms, such as country names and program acronyms, that the dense encoder misses. This is the best open and local configuration, at 0.689, and it runs on the free local model. It exceeds even a closed model using plain reranking, which scores 0.652 — direct evidence that retrieval, not generator size, is the dominant lever.
 
-#### 7.2.3 Generator Strength: Open vs Closed
+#### 6.1.3 Generator Strength: Open vs Closed
 
 With the best retrieval held fixed, varying the generator constitutes a genuine, additive second lever.
 
-**Table 7. Generator comparison on the best retrieval configuration.**
+**Table 6. Generator comparison on the best retrieval configuration.**
 
 | Generator | Answer correctness | Latency | Notes |
 |---|---|---|---|
@@ -464,15 +411,15 @@ With the best retrieval held fixed, varying the generator constitutes a genuine,
 
 The closed gpt-5.4-mini is both the most accurate and the fastest, but it runs in the cloud and so forfeits the privacy guarantee. We present it for two reasons: it is the open-versus-closed benchmark introduced in §4.2, and it is an optional tier for non-sensitive, accuracy-critical queries. It is not the recommended private deployment; that remains the local open model. Retrieval still dominates even at the open tier: the local model with hybrid retrieval (0.689) outperforms the closed model on plain reranking (0.652), and the closed model surpasses it only once it also uses hybrid retrieval.
 
-#### 7.2.4 Chunking, Embedding, and Data Leakage
+#### 6.1.4 Chunking, Embedding, and Data Leakage
 
-Three further levers proved minor. Chunk granularity is not the binding constraint: re-indexing at 512/64 instead of 1000/100 barely changed answer correctness (0.473 to 0.488). The embedding model is `sentence-transformers/all-mpnet-base-v2`; the original report's "embeddinggemma" label was an error, and because hybrid retrieval (§7.2.2) already covers a dense encoder's exact-term weakness, swapping it is a low priority. Finally, the original 300-item pool fully contains the 195 evaluation items, so the evaluation set is used unchanged throughout and fine-tuning is not a near-term lever. Appendix B gives the chunking, embedding, and data-leakage specifics.
+Three further levers proved minor. Chunk granularity is not the binding constraint: re-indexing at 512/64 instead of 1000/100 barely changed answer correctness (0.473 to 0.488). The embedding model is `sentence-transformers/all-mpnet-base-v2`, and because hybrid retrieval (§6.1.2) already covers a dense encoder's exact-term weakness, swapping it is a low priority. Finally, the initial 300-item pool fully contains the 195 evaluation items, so the evaluation set is used unchanged throughout and fine-tuning is not a near-term lever. Appendix A gives the chunking, embedding, and data-leakage specifics.
 
-### 7.3 Revising the Advanced Architecture
+### 6.2 Revising the Advanced Architecture
 
-Advanced v3 targets the two failures diagnosed in §6.4: v1's grader, which drops answer-bearing chunks and collapses recall, and v2's per-sub-question retrieval, which adds off-topic chunks and collapses precision. The problem is not decomposition itself but how these two versions implement it.
+Advanced v3 targets the two failures diagnosed in §5.4: v1's grader, which drops answer-bearing chunks and collapses recall, and v2's per-sub-question retrieval, which adds off-topic chunks and collapses precision. The problem is not decomposition itself but how these two versions implement it.
 
-Building on the best retriever from §7.2, Advanced v3 (Figure 5) applies four fixes, each aimed at one of those measured failures:
+Building on the best retriever from §6.1, Advanced v3 (Figure 5) applies four fixes, each aimed at one of those measured failures:
 
 1. Reranker-score thresholding replaces v1's binary grader, fixing the recall collapse.
 2. Reranking the per-sub-question union against the original query fixes v2's precision collapse.
@@ -481,7 +428,7 @@ Building on the best retriever from §7.2, Advanced v3 (Figure 5) applies four f
 
 The results, on the same 195 questions with the hybrid-plus-bge reranker and a mean latency of about 9.9 seconds per query, are below.
 
-**Table 8. Advanced v3 results (n=195, hybrid + bge reranker).**
+**Table 7. Advanced v3 results (n=195, hybrid + bge reranker).**
 
 | Generator | Ctx Precision | Ctx Recall | Faithfulness | Answer Correctness |
 |---|---|---|---|---|
@@ -490,51 +437,51 @@ The results, on the same 195 questions with the hybrid-plus-bge reranker and a m
 
 *The local-generator variant generated all 195 answers, but only 15 of 195 were scored before the evaluation window closed, owing to judge-budget contention with the closed-generator run. The partial sample is all-synthetic and not representative, so we report only the completed closed-generator run.
 
-With the strong closed generator model, Advanced v3 reaches an answer correctness of 0.780. That is effectively identical to the Basic pipeline on the same generator and retriever, which scores 0.774 (§7.2.3); the 0.006 gap is well within run-to-run variation. Advanced v3 also comes at higher latency, about 9.9 against 7.9 seconds per query, and materially more engineering complexity. The four fixes achieved precisely what §6.4 predicted which is closing the recall and precision gap between v1's grader and v2's per-sub-question retrieval raised the agentic pipeline from a net-negative architecture to parity with Basic. Hoever, they did not surpass it. The interpretation is consistent with the rest of the report. Once retrieval is fixed with hybrid fusion and reranking, the system is generation-bound, Additionaly, the agentic orchestration adds cost without adding accuracy on this corpus. We therefore continue to recommend Basic RAG for deployment. The full experiment matrix is in Appendix B.
+With the strong closed generator model, Advanced v3 reaches an answer correctness of 0.780. That is effectively identical to the Basic pipeline on the same generator and retriever, which scores 0.774 (§6.1.3); the 0.006 gap is well within run-to-run variation. Advanced v3 also comes at higher latency, about 9.9 against 7.9 seconds per query, and materially more engineering complexity. The four fixes achieved precisely what §5.4 predicted: closing the recall and precision gap between v1's grader and v2's per-sub-question retrieval raised the agentic pipeline from a net-negative architecture to parity with Basic. However, they did not surpass it. The interpretation is consistent with the rest of the report. Once retrieval is fixed with hybrid fusion and reranking, the system is generation-bound, and the agentic orchestration adds cost without adding accuracy on this corpus. We therefore continue to recommend Basic RAG for deployment. The full experiment matrix is in Appendix A.
 
 ---
 
-## 8. Recommendations and Future Work
+## 7. Recommendations and Future Work
 
-### 8.1 Recommended Deployment
+### 7.1 Recommended Deployment
 
-We recommend deploying Basic RAG with hybrid (BM25 plus dense) retrieval and cross-encoder reranking, using the local open llama3:8b generator as the private default. That configuration scores 0.689 on answer correctness and returns an answer in roughly 20 seconds on the re-evaluation laptop, within the 30-second threshold that 80% of staff stated they would accept. Latency will differ on production hardware.
+We recommend deploying Basic RAG with hybrid (BM25 plus dense) retrieval and cross-encoder reranking, using the local open llama3:8b generator as the private default. That configuration scores 0.689 on answer correctness and returns an answer in roughly 20 seconds on the workstation-class laptop, within the 30-second threshold that 80% of staff stated they would accept. Latency will differ on production hardware.
 
-![Figure 15. Recommended configuration.](figures/fig_recommended.svg)
+![Figure 14. Recommended configuration.](figures/fig_recommended.svg)
 
-*Figure 15. The recommended production pipeline: a single-pass (Basic) RAG pipeline with hybrid retrieval (BM25 + dense, fused by reciprocal rank fusion) and cross-encoder reranking, generating with a local llama3:8b model. The two highlighted retrieval stages supply the accuracy gains over dense-only retrieval (§7.2).*
+*Figure 14. The recommended production pipeline: a single-pass (Basic) RAG pipeline with hybrid retrieval (BM25 + dense, fused by reciprocal rank fusion) and cross-encoder reranking, generating with a local llama3:8b model. The two highlighted retrieval stages supply the accuracy gains over dense-only retrieval (§6.1).*
 
-Figure 15 shows the pipeline. Each query runs through two retrievers in parallel: BM25 for exact terms such as country names and study acronyms, and a dense embedding model for sematic meaning. Their results are merged by reciprocal rank fusion into a 20-chunk candidate set, and a cross-encoder reranker re-scores those candidates to keep the best four. The four chunks are passed to a local llama3:8b generator, which returns the answer together with the source chunks behind it. The pipeline stays single-pass — no query decomposition and no document grading — so it keeps the Basic pipeline's low latency, while the two retrieval stages supply the accuracy gains documented in §7.2. Every stage runs on local hardware, so no query or document leaves the premises.
+Figure 14 shows the pipeline. Each query runs through two retrievers in parallel: BM25 for exact terms such as country names and study acronyms, and a dense embedding model for semantic meaning. Their results are merged by reciprocal rank fusion into a 20-chunk candidate set, and a cross-encoder reranker re-scores those candidates to keep the best four. The four chunks are passed to a local llama3:8b generator, which returns the answer together with the source chunks behind it. The pipeline stays single-pass — no query decomposition and no document grading — so it keeps the Basic pipeline's low latency, while the two retrieval stages supply the accuracy gains documented in §6.1. Every stage runs on local hardware, so no query or document leaves the premises.
 
-As §7.3 concluded, the agentic pipeline is not recommended for deployment. The closed gpt-5.4-mini model should be offered only as an optional higher-accuracy tier for non-sensitive queries.
+As §6.2 concluded, the agentic pipeline is not recommended for deployment. The closed gpt-5.4-mini model should be offered only as an optional higher-accuracy tier for non-sensitive queries.
 
-### 8.2 Deployment Model
+### 7.2 Deployment Model
 
-The prototype ran on a single laptop, which determines the latency figures in this report. For organizational use we recommend a local network server rather than per-user installations. A single on-premises GPU server would host the model and the vector index and serve the existing web interface to staff browsers. That keeps data on-premises, centralizes index updates and it could host a larger local model than a laptop can, which would help address the sub-10B accuracy ceiling. The cloud closed-model tier from §7.2.3 is reserved for non-sensitive queries.
+The prototype ran on a single laptop, which determines the latency figures in this report. For organizational use we recommend a local network server rather than per-user installations. A single on-premises GPU server would host the model and the vector index and serve the existing web interface to staff browsers. That keeps data on-premises, centralizes index updates and it could host a larger local model than a laptop can, which would help address the sub-10B accuracy ceiling. The cloud closed-model tier from §6.1.3 is reserved for non-sensitive queries.
 
-### 8.3 Future Work
+### 7.3 Future Work
 
 These findings point to several next steps.
 
 The most important is human-expert evaluation. Subject-matter experts should grade a representative subset, both to calibrate the LLM judge and to test whether a given score is good enough for professional use. One observation lessens the concern in the meantime: the best configuration scores 0.774 on answer correctness and 0.865 on precision, both well clear of the 0.5 adequacy mark. A formal expert study remains the right next step.
 
-The evaluation set also needs more reasoning-heavy questions. It is currently about 68% fact-retrieval and under-samples methodological "why and how" questions (§4.4.1). A follow-up evaluation set should include more questions on sampling design, weighting, and plausible values.
+The evaluation set also needs more reasoning-heavy questions. It is currently about 68% fact-retrieval and under-samples methodological "why and how" questions (§4.4). A follow-up evaluation set should include more questions on sampling design, weighting, and plausible values.
 
 Retrieval can likely be improved further. Contextual retrieval (Anthropic, 2024) prepends a short LLM-generated summary to each chunk before embedding, so the chunk keeps the document context that plain chunking removes. Anthropic reports that this cuts retrieval failures substantially. It applies on top of the recommended hybrid-plus-rerank stack and costs only a one-time indexing pass with the local model.
 
 Three engineering directions would also help:
 
-- A concision or usability metric, because the current fact-coverage metric rewards a raw chunk dump as highly as a concise answer and cannot credit what the generator adds (§6.3).
-- High-fidelity table extraction, using specialized parsers (Docling, Auer et al., 2024; Marker; PaddleOCR's PP-StructureV2, Li et al., 2022) or vision-based RAG that retrieves over page images and skips text extraction entirely (ColPali, Faysse et al., 2024; VisRAG, Yu et al., 2025), for the table problem (§6.5).
+- A concision or usability metric, because the current fact-coverage metric rewards a raw chunk dump as highly as a concise answer and cannot credit what the generator adds (§5.3).
+- High-fidelity table extraction, using specialized parsers (Docling, Auer et al., 2024; Marker; PaddleOCR's PP-StructureV2, Li et al., 2022) or vision-based RAG that retrieves over page images and skips text extraction entirely (ColPali, Faysse et al., 2024; VisRAG, Yu et al., 2025), for the table problem (§5.5).
 - Latency optimization through quantization (AWQ; Lin et al., 2024), efficient serving (vLLM; Kwon et al., 2023), and prefix caching (SGLang; Zheng et al., 2024), to push the local tier below 10 seconds and make room for larger models on a server.
 
-### 8.4 Limitations
+### 7.4 Limitations
 
-The results are bounded in several ways. Three bound how far they generalize and directly motivate the future work above (§8.3): the corpus is single-domain and public (PIRLS), the LLM judge is not yet calibrated against human experts, and the question set is weighted toward fact-retrieval. Three further caveats concern the measurements themselves. PDF-to-text preprocessing introduces artifacts, most visibly in tables (§6.5). We did not run formal significance tests, so small differences in answer correctness (a few hundredths of a point) should be read as run-to-run variation rather than real gaps. And latency is hardware-specific: the re-evaluation ran on a less capable laptop (Intel Arc Pro 140T, 32 GB) than the original RTX-4090 prototype, so response times are not comparable across the two reports and are used only for relative comparison within the re-evaluation runs.
+The results are bounded in several ways. Three bound how far they generalize and directly motivate the future work above (§7.3): the corpus is single-domain and public (PIRLS), the LLM judge is not yet calibrated against human experts, and the question set is weighted toward fact-retrieval. Three further caveats concern the measurements themselves. PDF-to-text preprocessing introduces artifacts, most visibly in tables (§5.5). We did not run formal significance tests, so small differences in answer correctness (a few hundredths of a point) should be read as run-to-run variation rather than real gaps. And latency is hardware-specific: it was measured on a workstation-class laptop (Intel Arc Pro 140T, 32 GB) and is used only for relative comparison within this report's runs, not as an absolute production figure.
 
 ---
 
-## 9. Conclusion
+## 8. Conclusion
 
 A locally-hosted RAG system over PIRLS documentation is feasible on local hardware, and it meets the three requirements the staff survey identified: privacy through on-premises deployment, source-attributed answers, and a usable web interface. The central finding, supported throughout, is that retrieval quality rather than pipeline complexity determines answer quality. Cross-encoder reranking and hybrid retrieval together raised answer correctness from 0.47 to 0.69 on the free local model, and a value-added ablation confirms that retrieval accounts for most of the system's usefulness. The more complex agentic pipeline did not outperform the simple one: even a purpose-built rerank-aware redesign (Advanced v3), which repaired the failures that had made the earlier versions net-negative, only reached parity with Basic on the same generator (0.780 against 0.774), at higher latency and greater complexity.
 
@@ -542,7 +489,7 @@ The path forward is therefore clear. We recommend deploying Basic RAG with hybri
 
 ---
 
-## 10. References
+## 9. References
 
 Anthropic. (2024). *Introducing contextual retrieval.* https://www.anthropic.com/news/contextual-retrieval
 
@@ -604,31 +551,7 @@ Zheng, L., et al. (2024). *SGLang: Efficient execution of structured language mo
 
 ---
 
-## Appendix A — Changes from the Original Report
-
-This appendix summarizes how the present report differs from the original. Each change is classified as **added evidence** (a new experiment or analysis), an **editorial** revision, or an item **deferred** to future work (§8.3).
-
-| Change | Type | Section |
-|---|---|---|
-| Reframed the significance statements as motivations and explicit research questions | Editorial | §1.3 |
-| Corrected the Basic and Advanced architecture descriptions to match what was actually evaluated | Editorial | §3.3.2 |
-| Added knowledge-base scale figures and a chunking-sensitivity analysis | Added evidence | §3.1, §7.2.4 |
-| Corrected the embedding-model description to `all-mpnet-base-v2` | Correction | §3.1, §7.2.4 |
-| Documented the rationale for the generator, grader, and judge choices, and for DeepEval over RAGAS | Editorial | §4.2, §4.3 |
-| Classified the evaluation questions by cognitive level and flagged the under-sampling of reasoning questions | Added evidence; editorial | §4.4.1, §8.4 |
-| Reported every metric split by human and synthetic provenance | Added evidence | §4.4.1, §6.2–6.3 |
-| Clarified the 300-to-195 item selection and reused the same 195 items for comparability | Editorial | §4.4 |
-| Added a with-versus-without-retrieval baseline (value-added ablation) | Added evidence | §6.3 |
-| Added a retrieval-only baseline isolating what the generator contributes | Added evidence | §6.3 |
-| Added an open-versus-closed generator comparison and related it to the NAEP no-retrieval finding | Added evidence; editorial | §7.2.3, §6.3 |
-| Added a stage-level attribution of where the advanced pipeline loses quality | Added evidence | §6.4 |
-| Hardened the evaluation: chunk-list logging, fixed embedding and retrieval, and a single held-constant judge | Added evidence | §7.1 |
-| Added a deployment-model discussion (local network server versus per-user installs) | Editorial | §8.2 |
-| Deferred calibrated human-expert evaluation, validation on internal documents, and full judge-sufficiency calibration | Future work | §8.3 |
-
----
-
-## Appendix B — Full Experiment Matrix
+## Appendix A — Full Experiment Matrix
 
 All runs are n=195, judged by `gpt-oss-120b`. The best open/local configuration and the best overall configuration are in bold.
 
@@ -651,7 +574,7 @@ All runs are n=195, judged by `gpt-oss-120b`. The best open/local configuration 
 | Advanced v3 (rerank-aware) | gpt-5.4-mini | hybrid + 4 fixes | 0.855 | 0.897 | 0.980 | 0.780 | 9.9 s* |
 
 *API runs use hosted GPUs, which are not comparable hardware to the local runs.
-†The local-generator Advanced v3 generated all 195 answers, but only 15 of 195 were scored before the evaluation window closed (judge-budget contention); not reported. See §7.3.
+†The local-generator Advanced v3 generated all 195 answers, but only 15 of 195 were scored before the evaluation window closed (judge-budget contention); not reported. See §6.2.
 
 **Configuration notes.** A few of the runs above warrant explanation.
 
@@ -659,11 +582,11 @@ All runs are n=195, judged by `gpt-oss-120b`. The best open/local configuration 
 - *rerank + extract prompt* keeps the wide-retrieve-then-rerank retriever but switches the generation prompt to an extract-style instruction (pull the exact fact rather than write prose), to test whether prompt style lifts answer correctness. It did not (0.482), which located the reranking gain in retrieval rather than in the prompt.
 - *dense + bge reranker* reranks a dense-only candidate set with the bge-base cross-encoder instead of the lighter MiniLM. On dense-only retrieval bge trailed MiniLM (0.578), but under hybrid retrieval it performed better, which is why bge is the production reranker.
 
-**Embedding model.** Both the original prototype and this re-evaluation use `sentence-transformers/all-mpnet-base-v2`, a 768-dimensional general-purpose sentence encoder from Hugging Face. The original report's "embeddinggemma" label was an error. Because the hybrid BM25-plus-dense retriever (§7.2.2) already covers a single dense encoder's main weakness, exact-term matching, swapping the embedding model is a lower-priority lever than reranking and hybrid retrieval.
+**Embedding model.** The system uses `sentence-transformers/all-mpnet-base-v2`, a 768-dimensional general-purpose sentence encoder from Hugging Face. Because the hybrid BM25-plus-dense retriever (§6.1.2) already covers a single dense encoder's main weakness, exact-term matching, swapping the embedding model is a lower-priority lever than reranking and hybrid retrieval.
 
-**Data leakage.** The original 300-item pool fully contains the 195 evaluation items, leaving only about 105 genuinely separate rows — too few to fine-tune on without leakage. This is a further reason the evaluation set is used unchanged throughout, and why fine-tuning is not a near-term lever.
+**Data leakage.** The initial 300-item pool fully contains the 195 evaluation items, leaving only about 105 genuinely separate rows, too few to fine-tune on without leakage. This is a further reason the evaluation set is used unchanged throughout, and why fine-tuning is not a near-term lever.
 
-**Value-added ablation (answer correctness, no-retrieval baselines; see §6.3).**
+**Value-added ablation (answer correctness, no-retrieval baselines; see §5.3).**
 
 | Run | Generator | Configuration | Answer Corr |
 |---|---|---|---|
@@ -673,14 +596,14 @@ All runs are n=195, judged by `gpt-oss-120b`. The best open/local configuration 
 
 ---
 
-## Appendix C — Evaluation Results
+## Appendix B — Evaluation Results
 
-The complete evaluation results are provided as an accompanying spreadsheet, `revised_final_report_appendix_C.xlsx`. It has a Summary sheet with one row per run — generator, configuration, the five metrics, the human/synthetic answer-correctness split, and latency — and a per-run detail sheet giving the per-question scores behind each run. The underlying per-row CSVs are in the repository's `results/` directory. The generated answers and retrieved contexts behind these scores are provided separately in Appendix D.
+The complete evaluation results are provided as an accompanying spreadsheet, `revised_final_report_appendix_B.xlsx`. It has a Summary sheet with one row per run — generator, configuration, the five metrics, the human/synthetic answer-correctness split, and latency — and a per-run detail sheet giving the per-question scores behind each run. The underlying per-row CSVs are in the repository's `results/` directory. The generated answers and retrieved contexts behind these scores are provided separately in Appendix C.
 
 **Reproducibility.** The benchmark used the following components. Generators: `llama3:8b` (primary, local via Ollama), `deepseek-r1:8b` (local), and `gpt-5.4-mini` (closed, cloud); the agentic pipelines use `gemma3:1b` as the internal grader. Retrieval: `sentence-transformers/all-mpnet-base-v2` embeddings (768-dim) in a Chroma index, BM25 for sparse retrieval, reciprocal rank fusion, and a `bge-base` cross-encoder reranker. All quality metrics were scored by a single held-constant judge, `gpt-oss-120b`, through an OpenAI-compatible API, using DeepEval's reference-based contextual metrics and G-Eval answer correctness. The pipelines are built on LangChain, LangGraph, Chroma, and Ollama. The evaluation set is the 195-item revised dataset in `datasets/revision/`. The harness, dataset, and per-row results are held in the internal IEA project repository and are available to IEA staff on request, subject to data-governance approval.
 
 ---
 
-## Appendix D — Generated Answers and Retrieved Contexts
+## Appendix C — Generated Answers and Retrieved Contexts
 
-The per-question generated answers and the chunks retrieved for every run are provided as an accompanying spreadsheet, `revised_final_report_appendix_D.xlsx` — the qualitative companion to Appendix C, cross-referenced by (run, row_id). It contains an "All runs" sheet with one row per question per run (filterable by run and row_id, for comparing how different pipelines answered the same question) and one sheet per run, in the same order and with the same names as Appendix C's detail sheets. Each row gives the question, the gold reference answer and passage, the generated answer, and the retrieved chunks shown to the generator, together with the chunk count and latency. Two run types are special: closed-book runs use no retrieval, so their retrieved-context column reads "— (no retrieval)"; and the retrieval-only run returns the raw top-k chunks directly as the answer, with no generation step (§6.3).
+The per-question generated answers and the chunks retrieved for every run are provided as an accompanying spreadsheet, `revised_final_report_appendix_C.xlsx` — the qualitative companion to Appendix B, cross-referenced by (run, row_id). It contains an "All runs" sheet with one row per question per run (filterable by run and row_id, for comparing how different pipelines answered the same question) and one sheet per run, in the same order and with the same names as Appendix B's detail sheets. Each row gives the question, the gold reference answer and passage, the generated answer, and the retrieved chunks shown to the generator, together with the chunk count and latency. Two run types are special: closed-book runs use no retrieval, so their retrieved-context column reads "— (no retrieval)"; and the retrieval-only run returns the raw top-k chunks directly as the answer, with no generation step (§5.3).

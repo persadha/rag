@@ -12,7 +12,7 @@ from openpyxl.styles import Font, PatternFill, Alignment
 
 ROOT = Path(__file__).parent.parent          # repo root
 RESULTS = ROOT / "results"
-OUT = Path(__file__).parent / "revised_final_report_appendix_C.xlsx"
+OUT = Path(__file__).parent / "revised_final_report_appendix_B.xlsx"
 
 METRICS = ["contextual_precision", "contextual_recall", "faithfulness",
            "answer_correctness", "gold_context_similarity"]

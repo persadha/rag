@@ -25,7 +25,7 @@ csv.field_size_limit(10 ** 8)
 
 ROOT = Path(__file__).parent
 RESULTS = ROOT.parent / "results"
-OUT = ROOT / "revised_final_report_appendix_D.xlsx"
+OUT = ROOT / "revised_final_report_appendix_C.xlsx"
 CELL_MAX = 32000  # Excel hard limit is 32767; leave headroom
 
 # gen CSV -> run name, in Appendix C order (names match its detail sheets).
